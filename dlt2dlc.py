@@ -1,5 +1,12 @@
-# takes marked and named tracks and converts them to DLC labled format, while grabbing and exporting proper video frames
-# wiki Page (on github) some notes
+"""
+Takes digitized frames from DLTdv or Argus based DLT 3D projects, exports hd5, csv, and images for training DeepLabCut with those images.
+
+Before starting, the video file should be re-named something unique to the DLC project. 
+
+Makes a new directory that can be copied directly into a deeplabcut_project_folder/labeled-images
+
+You must also edit the deeplabcut project config.yaml file to include a path to the video (with the unique name), or "add video" to the DLC project.
+"""
 
 import argparse
 import pandas as pd
@@ -8,56 +15,52 @@ import cv2
 from pathlib import Path
 
 def main(fname, vname, cnum, numcams, scorer, opath):
-    # edit any paths
+    
     # load xypts file to dataframe
     xypts = pd.read_csv(fname)
-    # narrow down to just the columns pertaining to the proper camera
-#     print(len(xypts.columns))
-
-# make Set of frames to be extracted (combine lists, set, sort)
+    # make Set of frames to be extracted, and get tracknames
     frames = []
     trackNames = []
-    dataDict = {}
     for i in range(int(len(xypts.columns)/(2*numcams))):
         icol = i*(2*numcams) + (cnum * 2)
-        arr = xypts.iloc[:, icol].to_numpy()
+        arr = xypts.iloc[:, icol]#.to_numpy()
         frs = list(np.where(np.isfinite(arr))[0])
         frames += frs 
         # get the track name
         if len(frs) > 0:
-            trackNames.append(xypts.columns[icol])#.split('_cam')[0])
+            trackNames.append(xypts.columns[icol])
             trackNames.append(xypts.columns[icol+1])
-      
-    frames = sorted(set(frames))
-#     collist = 
-    data = xypts.loc[frames,trackNames]
-#     print(data)
-    #colnames needs to be duplicated tracknames [head, head, arm, arm...]
-    #colnames = [ (x, x) for x in trackNames]
-    #colnames = [item for t in colnames for item in t] 
-    # initialize dataFrame to store
+    
+    # get zero-indexed frame numbers that have digitized points in this camera
+    frames = set(frames)
+    # create a copy of just the relevant part of the data
+    df = xypts.loc[frames,trackNames].copy()
+    
+    # get unique track names
     colnames = [ x.split('_cam')[0] for x in trackNames[0:-1:2]]
-    s = [scorer] #*len(colnames)
-    coords = ['x','y']# * int(len(colnames)/2)
-#     print(len(s), len(colnames),len(coords))
+    # some standard multi-index headers
+    s = [scorer]
+    coords = ['x','y']
+    
+    # create the multi index header and apply it
     header = pd.MultiIndex.from_product([s,
                                      colnames,
                                      coords],
                                     names=['scorer','bodyparts', 'coords'])
-#     df = pd.DataFrame(data, 
-#                       index=frames, 
-#                       columns=header)
-    df=data.copy()
+
     df.columns=header
-    #TODO convert NaN to empty (blank string: '' ?)
-    # make a new directory with the name of the video for the hdf, csv, and pngs
-    
+    # replace DLT nans with empty entries
+    df.fillna('', inplace=True)
+    indexPath = Path('labeled-data')
+    indexPath = indexPath / vname.stem
+    #df.index.values = [str(indexPath / 'img{:04d}.png'.format(df.index.values[x])) for x in range(len(df.index.values))]
+    df.rename(inplace = True, index = lambda s: str(indexPath / 'img{:04d}.png'.format(s)))
     # save out hdf and csv files
-    frame.to_hdf(opath / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
-    frame.to_csv(opath / ('CollectedData_' + scorer + '.csv'))
+    df.to_hdf(opath / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
+    df.to_csv(opath / ('CollectedData_' + scorer + '.csv'))
 
     # load video
-    cap = cv2.VideoCapture(str(vidfile))
+    cap = cv2.VideoCapture(str(vname))
     #get some info about the file (in case I need size to save png
     size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
         int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
@@ -72,8 +75,10 @@ def main(fname, vname, cnum, numcams, scorer, opath):
         cap.set(cv2.CAP_PROP_POS_MSEC, fr*1000/fps)
         success, frame = cap.read()
         if success:
+            # make file name
+            outimg = opath / ('img{:04d}.png'.format(fr))
             #save image
-            cv2.
+            cv2.imwrite(str(outimg), frame)
 
 
 
@@ -91,26 +96,20 @@ if __name__== '__main__':
     parser.add_argument('-newpath', default = None, help = 'enter a path for saving, existing target folder will be overwritten, should end with "labeled-data/<videoname>"')
     
     #TODO: add ability to pass frames for extraction instead of all frames?
-                    
-    # parser.add_argument('-sf', '--sampfreq', help = 'sampling frequency in sf')
-    # parser.add_argument('-c', '--cutoff', help = 'lowpass cutoff frequency')
 
     args = parser.parse_args()
     
-    fname = args.xy
-    vname = args.vid
+    fname = Path(args.xy)
+    vname = Path(args.vid)
     cnum = int(args.cnum)-1
     numcams = int(args.numcams)
     scorer = args.scorer
+    
     # make a new dir for output
     if not args.newpath:
         opath = vname.parent / 'labeled-data' / vname.stem
     else:
         opath = Path(args.newpath)
-    opath = Path(opath)
-    opath.mkdir(parents = True, exists_ok = True)
+    opath.mkdir(parents = True, exist_ok = True)
     
     main(fname, vname, cnum, numcams, scorer, opath)
-    # sf = int(args.sampfreq)
-    # c = int(args.cutoff)
-    # main(args.filename, sf, c)
