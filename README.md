@@ -96,5 +96,5 @@ To get xyz pts, load the new -xypts.csv as data in DLTdv or Argus as if you digi
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the GNU Lesser General Public License v3.0; see the [LICENSE.md](LICENSE.md) file for details. Note that the software is provided "as is", without warranty of any kind, express or implied. If you use the code, please cite DeepLabCut and either DLTdv or Argus.
 
