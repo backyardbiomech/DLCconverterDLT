@@ -16,6 +16,8 @@ Download the scripts. Put them somewhere handy. Call them on the command-line.  
 
 ## Usage
 
+For both functions, the flag `-flipy` will default to `True` which is necessary if your data are from Argus or DLTdv versions prior to 8.0. In those packages, the coordinate origin is in the lower left of the video, but the computer vision standard (used by DeepLabCut and by DLTdv8) is for the origin to be in the **upper** left. If you are using DLTdv8, just add `-flipy False` to the call.
+
 ### dlt2dlc
 
 Many of us have lots of data already digitized in a DLT-calibrated environment. Those already digitized points can be used in place of "labeling" video in DeepLabCut. That's what dlt2dlc.py is for. It "essentially" replaces/parallels the labelling function in DLC.
