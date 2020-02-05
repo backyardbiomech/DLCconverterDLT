@@ -1,11 +1,14 @@
-"""
-Takes digitized frames from DLTdv or Argus based DLT 3D projects, exports hd5, csv, and images for training DeepLabCut with those images.
+"""Takes digitized frames from DLTdv or Argus based DLT 3D projects, exports hd5, csv, and images for training
+DeepLabCut with those images.
 
 Before starting, the video file should be re-named something unique to the DLC project. 
 
 Makes a new directory that can be copied directly into a deeplabcut_project_folder/labeled-images
 
-You must also edit the deeplabcut project config.yaml file to include a path to the video (with the unique name), or "add video" to the DLC project.
+New directory is just a path to where you want to create 'labeled-images/vidname/' output directory
+
+You must also edit the deeplabcut project config.yaml file to include a path to the video (with the unique name),
+or "add video" to the DLC project.
 
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
@@ -63,8 +66,9 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
     df = xypts.loc[frames,trackNames].copy()
 
     if flipy:
+        print('flipping')
         # flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
-        ycols = [x for x in df.columns if '-y' in x]
+        ycols = [x for x in df.columns if '_y' in x]
         df.loc[:, ycols] = height - df.loc[:, ycols]
 
     # get unique track names
@@ -119,7 +123,7 @@ if __name__== '__main__':
     parser.add_argument('-numcams', default=3, help='enter number of cameras')
     parser.add_argument('-scorer', default='DLT', help='enter scorer name to match DLC project')
     parser.add_argument('-newpath', default = None, help = 'enter a path for saving, existing target folder will be overwritten, should end with "labeled-data/<videoname>"')
-    parser.add_argument('-flipy', default = True, help = 'flip y coordinates - necessar for Argus and DLTdv versions 1-7, set to False for DLTdv8')
+    parser.add_argument('-flipy', default = True, help = 'flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
     parser.add_argument('-offset', default = 0, type=int, help='enter offset of chosen camera as integer')
     
     #TODO: add ability to pass frames for extraction instead of all frames?
@@ -135,7 +139,7 @@ if __name__== '__main__':
     if not args.newpath:
         opath = vname.parent / 'labeled-data' / vname.stem
     else:
-        opath = Path(args.newpath)
+        opath = Path(args.newpath) / 'labeled-data' / vname.stem
     opath.mkdir(parents = True, exist_ok = True)
     
     main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset)
