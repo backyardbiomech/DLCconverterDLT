@@ -63,7 +63,7 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
     # get zero-indexed frame numbers that have digitized points in this camera
     frames = sorted(set(frames))
     # create a copy of just the relevant part of the data
-    df = xypts.loc[frames,trackNames].copy()
+    df = xypts.loc[frames, trackNames].copy()
 
     if flipy:
         print('flipping')
@@ -72,10 +72,10 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
         df.loc[:, ycols] = height - df.loc[:, ycols]
 
     # get unique track names
-    colnames = [ x.split('_cam')[0] for x in trackNames[0:-1:2]]
+    colnames = [x.split('_cam')[0] for x in trackNames[0:-1:2]]
     # some standard multi-index headers for DLC compatability
     s = [scorer]
-    coords = ['x','y']
+    coords = ['x', 'y']
     
     # create the multi index header and apply it
     header = pd.MultiIndex.from_product([s,
