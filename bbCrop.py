@@ -22,6 +22,12 @@ def main(vidpath, xypath):
     # convert to ints
     bbdata[scorer]['ul'] = np.floor(bbdata[scorer]['ul'])
     bbdata[scorer]['br'] = np.ceil(bbdata[scorer]['br'])
+    # save bbdata with these integers to use in cropped2full.py
+    datapath = Path(vidpath.parent) / (str(xypath.stem) + '_cropped')
+    bbdata.to_hdf(str(datapath) + '.h5', key='df_with_missing', mode='w')
+    bbdata.to_csv(str(datapath) + '.csv')
+
+    # fill nans and make true int for opencv
     bbdata.fillna(0, inplace=True)
     bbdata = bbdata.astype(int)
     # find maxwidth and maxheight
