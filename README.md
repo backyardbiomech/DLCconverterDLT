@@ -6,7 +6,9 @@ While DLC has 3D capabilities (using checkerboards), many field-based setups nec
 
 Multi-camera setups that are not frame-synced (e.g. GoPros) must have offsets calculated (Argus), and adjusted for. These scripts account for those offset values.
 
-**NOTE**: As of 23 January 2020, these "work" in so far as they produce files that look like they have the correct format without spitting out erros. They have NOT been tested in a complete workflow to make sure that everything matches up where it should. Please feel free to test, edit, contribute, suggest. Consider these a first draft!
+As a bonus (i.e. because I needed it), I'm also including bbCrop.py to allow digitizing (labeling) of a bounding box (upperleft - 'ul', and bottom right - 'br') to produced individual images cropped to that bounding box. These images could then be trained and analyzed in DLC. Those output coordinates can then be put back into the full video resolution with cropped2full.py for full 2d coordinates, or processed with dlc2dlt.py to be brought back into a DLT system for 3D coordinates.
+
+**NOTE**: As of 6 February, 2020, these "work" in so far as they produce files that look like they have the correct format without spitting out errors. They have NOT been tested in a complete workflow to make sure that everything matches up where it should. Please feel free to test, edit, contribute, suggest. Consider these a first draft!
 
 Once they are well tested, I will include these functions directly in Argus, and I'm sure a similar set of MATLAB scripts will find their way into DLTdv8.
 
