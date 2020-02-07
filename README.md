@@ -98,6 +98,10 @@ To get xyz pts, load the new -xypts.csv as data in DLTdv or Argus as if you digi
 
 * **Brandon E. Jackson, Ph.D.** 
 
+## References
+
+If you use this code, for now, please cite the appropriate DeepLabCut and Argus or DLTdv papers.
+
 ## License
 
 This project is licensed under the GNU Lesser General Public License v3.0; see the [LICENSE.md](LICENSE.md) file for details. Note that the software is provided "as is", without warranty of any kind, express or implied. If you use the code, please cite DeepLabCut and either DLTdv or Argus.
