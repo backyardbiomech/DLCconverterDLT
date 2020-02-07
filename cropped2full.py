@@ -18,7 +18,7 @@ def main(xypath, bbpath):
     # load both files
     coords = pd.read_hdf(xypath, 'df_with_missing')
     bbdata = pd.read_hdf(bbpath, 'df_with_missing')
-    scorer = bbdata.loc[:, data.columns.get_values()[0][0]]
+    scorer = bbdata.loc[:, bbdata.columns.get_values()[0][0]]
     # make a copy of coords to be modified
     fullcoords = coords.copy()
     # for each point, add upper left x and y
@@ -28,8 +28,9 @@ def main(xypath, bbpath):
     hdfpath = Path(xypath.parent) / (xypath.stem + '_corrected.h5')
     csvpath = Path(xypath.parent) / (xypath.stem + '_corrected.csv')
 
-    df.to_hdf(hdfpath, key='df_with_missing', mode='w')
-    df.to_csv(csvpath + scorer + '.csv')
+    fullcoords.to_hdf(hdfpath, key='df_with_missing', mode='w')
+    fullcoords.to_csv(csvpath + scorer + '.csv')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
