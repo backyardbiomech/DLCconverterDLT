@@ -6,7 +6,7 @@ Saves as vidname_cropped.ext to same directory as original video
 
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
-Last edited: 6 Feb 2020
+Last edited: 7 Feb 2020
 """
 
 import argparse
@@ -18,43 +18,65 @@ import pandas as pd
 def main(vidpath, xypath):
     # load xypts
     bbdata = pd.read_hdf(xypath, 'df_with_missing')
-    scorer = bbdata.loc[:,data.columns.get_values()[0][0]]
+    scorer = bbdata.columns.get_values()[0][0]
+    # convert to ints
+    bbdata[scorer]['ul'] = np.floor(bbdata[scorer]['ul'])
+    bbdata[scorer]['br'] = np.ceil(bbdata[scorer]['br'])
+    bbdata.fillna(0, inplace=True)
+    bbdata = bbdata.astype(int)
     # find maxwidth and maxheight
-    maxwidth = max(bbdata.loc[:, (scorer, 'br', 'x')] - bbdata.loc[:, (scorer, 'ul', 'x')])
-    maxheight = max(bbdata.loc[:, (scorer, 'br', 'y')] - bbdata.loc[:, (scorer, 'ul', 'y')])
+    diff = bbdata[scorer]['br'] - bbdata[scorer]['ul']
+    maxwidth = (np.nanmax(diff['x']))
+    maxheight = (np.nanmax(diff['y']))
 
     # make a template black frame
-    allblack = np.zeros((maxwidth, maxheight, 3), np.uint8)
+    allblack = np.zeros((maxheight, maxwidth, 3), np.uint8)
+
     # load video
-    cap = cv2.VideoCapture(vidpath)
+    cap = cv2.VideoCapture(str(vidpath))
     numfr = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
 
     # set up video writer with size and codecs
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    outpath = vidpath.parent / (str(vidpath.stem) + '.mov')
-    out = cv2.VideoWriter(outpath, fourcc, fps, (maxwidth, maxheight))
-    #cv2.namedWindow("output")
+    outpath = vidpath.parent / (str(vidpath.stem) + '_cropped.mov')
+    out = cv2.VideoWriter(str(outpath), fourcc, fps, (maxwidth, maxheight), True)
+    cv2.namedWindow('output')
+
+    # look in the index to see if these are frame numbers, or paths to extracted images (from labeled data of DLC)
+    if '.png' in bbdata.index[0]:
+        im = [int(Path(x).stem[-4:]) for x in bbdata.index]
+        bbdata.index = im
+    else:
+        im = bbdata.index
 
     # loop through frames
+    waitvar = 1
     for i in range(numfr):
+        if i % 100 == 0:
+            print('frame {} of {}.'.format(i, numfr))
         success, frame = cap.read()
         cropped = allblack.copy()
         if not success:
             print('failed to load frame: ', i)
         else:
-            #get coords if they all exist
-            if np.all(np.isfinite(bbdata.loc[i,:])):
-                xmin = bbdata.loc[i, ('ul', 'x')]
-                xmax = bbdata.loc[i, ('br', 'x')]
-                ymin = bbdata.loc[i, ('ul', 'y')]
-                ymax = bbdata.loc[i, ('br', 'y')]
-                cropped[0: xmax-xmin, 0: ymax - ymin, :] = frame[xmin:xmax, ymin:ymax, :]
+            # get coords if they all exist
+            if (i in im) and np.count_nonzero(bbdata.loc[i]) == 4:
+                xmin = bbdata.loc[i, (scorer, 'ul', 'x')]
+                xmax = bbdata.loc[i, (scorer, 'br', 'x')]
+                ymin = bbdata.loc[i, (scorer, 'ul', 'y')]
+                ymax = bbdata.loc[i, (scorer, 'br', 'y')]
+                cropped[0: ymax-ymin, 0: xmax-xmin, :] = frame[ymin:ymax, xmin:xmax, :]
+                cv2.imshow('output', cropped)
         out.write(cropped)
+        k = cv2.waitKey(waitvar) & 0xFF
+        if k == 27:
+            break
 
     # exit
     cap.release()
     out.release()
+    cv2.destroyAllWindows()
     print('Saved cropped frames to {}'.format(str(outpath)))
 
 
