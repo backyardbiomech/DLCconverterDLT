@@ -82,12 +82,15 @@ optional arguments:
   -offsets OFFSETS [OFFSETS ...]
                         enter offsets as space separated list including first
                         camera e.g.: -offsets 0 -12 2
+
+  -like LIKE            set a likelihood threshold so that only good DLC fits
+                        are allowed to pass. 0.9 by default.
 ```
 
-for example, if you have a three camera DLT setup, and each camera has been tracked in DLC...
+for example, if you have a three camera DLT setup, and each camera has been tracked in DLC, and you want only the very best fits...
 
 ```
-python dlc2dlt.py -dlctracks /pathtoDLCproectfolder/videos/cam1tracked.h5 /pathtoDLCproectfolder/videos/cam2tracked.h5 /pathtoDLCproectfolder/videos/cam3tracked.h5 -newpath /a/path/to/somewhere/else/trial01DLCtracked -offsets 0 -20 34
+python dlc2dlt.py -dlctracks /pathtoDLCproectfolder/videos/cam1tracked.h5 /pathtoDLCproectfolder/videos/cam2tracked.h5 /pathtoDLCproectfolder/videos/cam3tracked.h5 -newpath /a/path/to/somewhere/else/trial01DLCtracked -offsets 0 -20 34 -like 0.9999
 ```
 will make the standard DLT files (4 of them) at new path, named trial01DLCtracked-xypts.csv, trial01DLCtracked-xyzpts.csv, trial01DLCtracked-xyzres.csv, trial01DLCtracked-offsets.csv. The -xyzpts and -xyzres files will be empty, but they must be created to be able to load the data into DLTdv or Argus.
 

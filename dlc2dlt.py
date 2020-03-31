@@ -104,4 +104,4 @@ if __name__== '__main__':
     opath = Path(args.newpath)
     # opath.mkdir(parents=True, exist_ok=True)
     
-    main(opath, args.dlctracks, args.flipy, offsets, args.like)
+    main(opath, args.dlctracks, args.flipy, offsets, float(args.like))
