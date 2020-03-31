@@ -2,7 +2,7 @@
 Uses DLC formatted xypts of ul (upper left) and br (bottom right) bounding boxes to make a new video of cropped frames.
 New video has size = (max bb width, max bb height) padded with black on right and bottom
 If no bounding box is available for a frame, inserts a black frame so frame numbers are consistent.
-Saves as vidname_cropped.mov to same directory as original video, and saves rounded bounding box coordinates for use in cropped2full.py
+Saves as vidname_cropped.mov to same directory as original video, and saves rounded bounding box coordinates for use in cropped2full.py and dlt2cropped.py
 
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu

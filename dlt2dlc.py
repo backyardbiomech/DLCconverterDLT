@@ -44,8 +44,8 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
         xypts.drop(range(-1*offset), inplace=True)
         xypts.reset_index(drop=True)
     if offset > 0:
-        # remove than many rows from the end of the df
-        xypts.drop(range(len(xypts)-offset,len(xypts)), inplace=True)
+        # remove that many rows from the end of the df
+        xypts.drop(range(len(xypts)-offset, len(xypts)), inplace=True)
         
     # make Set of frames to be extracted (they have digitized points), and get tracknames
     frames = []

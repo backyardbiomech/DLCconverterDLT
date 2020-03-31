@@ -1,53 +1,68 @@
 """
-Takes dlt-style coordinates, and cropped coordinates from DLC format, and saves
-DLC style corrected coordinates
+Takes dlt-style coordinates, cropped coordinates from DLC format, and saves
+DLT style crop-corrected coordinates
 """
 
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import argparse
+import re
 
-def main(fname, cropname, cnum, numcams, opath, flipy, offset):
+def main(fname, croplist, numcams, opath, flipy, offsets):
+    croppaths = [Path(x) for x in croplist]
     # load xypts file to dataframe
     xypts = pd.read_csv(fname)
+    xynew = xypts.copy() * np.nan
+    for c in range(numcams):
+        # load the cropped data file
+        cropped = pd.read_hdf(croppaths[c], 'df_with_missing')
+        # get the scorer
+        scorer = cropped.columns.get_level_values('scorer')[0]
+        # get the 'ul' x and y columns from this camera
+        # PROBLEM: coordinates for training bounding boxes are indexed by path to training image. Coordinates from DLC analysis is indexed by frame number, and has 'x', 'y', and 'likelihood' columns
+        # test if the cropped coordinates are from a training set (rare, all done in DLT, or in testing), or from analyzed data'
+        ul = cropped[scorer]['ul'][['x', 'y']]
+        # if it's analyzed data, index is already set as 0-indexed frame integer, do nothing
+        if cropped.index.dtype != 'int':
+            # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
+            new = [Path(x).stem for x in ul.index]
+            ul.index = [int(re.findall(r'\d+', s)[0]) for s in new]
+        # correct for offsets by reindexing, effectively inserting blank rows at the start or end of cropped
+        ul.index = ul.index - offsets[c]
+        # make a copy df to work with, set all values to NaN
+        #TODO need to flip the Y - may be different for each camera! so requires loading the videos
+        for i in range(int(len(xypts.columns)/(2*numcams))):
+            icol = i * (2 * numcams) + (c * 2)
+            # do the subtraction, indexes should take care of everything
+            #xypts.iloc[:, icol : icol+2] = xypts.iloc[:, icol : icol+2] - ul
+            xynew.iloc[ul.index, icol: icol+2] = xypts.iloc[ul.index, icol:icol+2].values - ul.values
+    # resave the xypts - no need to xyz etc since this is just an intermediate for dlt2dlc.py
+    xynew.to_csv(opath, na_rep='NaN', index=False)
 
-    if offset < 0:
-        # the DLT digitized value on the n-th row was actually digitized at n+offset frame
-        # e.g. if offset = -5, a point digitized in the first frame of the video will be placed
-        # on the 5th row of the xypts csv file, so negative offsets mean that many blank rows
-        # need to be removed from the front of the df
-        xypts.drop(range(-1 * offset), inplace=True)
-        xypts.reset_index(drop=True)
-    if offset > 0:
-        # remove than many rows from the end of the df
-        xypts.drop(range(len(xypts) - offset, len(xypts)), inplace=True)
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description = 'convert argus to cropped DLC coordinates for training')
     parser.add_argument('-xy', help = 'input path to xypts file')
-    parser.add_arugment('-crop', help = 'input path to DLC crop file')
+    parser.add_argument('-crop', nargs='+', help='input paths to DLC crop files for each video separated by spaces')
     parser.add_argument('-numcams', default=3, help='enter number of cameras')
-    parser.add_argument('-cnum', default=2, help='enter 1-indexed camera number for extraction')
-    parser.add_argument('-newpath', default=None, help='enter a path for saving, existing target folder will be overwritten, should end with "labeled-data/<videoname>"')
     parser.add_argument('-flipy', default=True,
                         help='flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
-    parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
-
+    parser.add_argument('-offsets', nargs='+', default=None, help='enter offsets as space separated list including first camera e.g.: -offsets 0 -12 2')
     args = parser.parse_args()
 
     fname = Path(args.xy)
-    cropname = Path(args.crop)
-    cnum = int(args.cnum) - 1
+    croplist = args.crop
     numcams = int(args.numcams)
 
-    # make a new dir for output
-    if not args.newpath:
-        opath = cropname.parent / 'labeled-data' / cropname.stem
+    if not args.offsets:
+        offsets = [0] * len(croplist)
     else:
-        opath = Path(args.newpath) / 'labeled-data' / cropname.stem
-    if not opath.exists():
-        opath.mkdir(parents=True, exist_ok=True)
+        offsets = [int(x) for x in args.offsets]
 
-    main(fname, cropname, cnum, numcams, opath, args.flipy, args.offset)
+    opath = fname.parent / (str(fname.stem) + 'cropped.csv')
+
+    main(fname, croplist, numcams, opath, args.flipy, offsets)
