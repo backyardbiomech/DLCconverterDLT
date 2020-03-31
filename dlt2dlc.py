@@ -117,7 +117,7 @@ if __name__== '__main__':
     description='convert argus to DLC labeled frames for training')
 
     parser.add_argument('-xy', 
-                         help='input path to xyzpts file')
+                         help='input path to xypts file')
     parser.add_argument('-vid', help='input path to video file')
     parser.add_argument('-cnum', default=1, help='enter 1-indexed camera number for extraction')
     parser.add_argument('-numcams', default=3, help='enter number of cameras')
@@ -140,6 +140,7 @@ if __name__== '__main__':
         opath = vname.parent / 'labeled-data' / vname.stem
     else:
         opath = Path(args.newpath) / 'labeled-data' / vname.stem
-    opath.mkdir(parents = True, exist_ok = True)
+    if not opath.exists():
+        opath.mkdir(parents = True, exist_ok = True)
     
     main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset)

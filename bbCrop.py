@@ -17,19 +17,25 @@ import pandas as pd
 
 def main(vidpath, xypath):
     # load xypts
-    bbdata = pd.read_hdf(xypath, 'df_with_missing')
-    scorer = bbdata.columns.get_values()[0][0]
+    print('loading bb xypts')
+    bbdata = pd.read_hdf(xypath, key='df_with_missing')
+    bbdata=bbdata.replace('', 0)
+    bbdata=bbdata.astype('float64')
+    scorer = bbdata.columns.get_level_values('scorer')[0]
     # convert to ints
     bbdata[scorer]['ul'] = np.floor(bbdata[scorer]['ul'])
     bbdata[scorer]['br'] = np.ceil(bbdata[scorer]['br'])
+    # bbdata[bbdata == -1] = ''
+    bbdata = bbdata.astype(int)
     # save bbdata with these integers to use in cropped2full.py
-    datapath = Path(vidpath.parent) / (str(xypath.stem) + '_cropped')
+    datapath = Path(xypath.parent) / (str(xypath.stem) + '_cropped')
+    print('saving rounded data to {}'.format(str(datapath)))
     bbdata.to_hdf(str(datapath) + '.h5', key='df_with_missing', mode='w')
     bbdata.to_csv(str(datapath) + '.csv')
 
     # fill nans and make true int for opencv
     bbdata.fillna(0, inplace=True)
-    bbdata = bbdata.astype(int)
+
     # find maxwidth and maxheight
     diff = bbdata[scorer]['br'] - bbdata[scorer]['ul']
     maxwidth = (np.nanmax(diff['x']))
@@ -39,15 +45,16 @@ def main(vidpath, xypath):
     allblack = np.zeros((maxheight, maxwidth, 3), np.uint8)
 
     # load video
+    print('loading video')
     cap = cv2.VideoCapture(str(vidpath))
     numfr = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-
+    print('video has {} frames'.format(numfr))
     # set up video writer with size and codecs
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    outpath = vidpath.parent / (str(vidpath.stem) + '_cropped.mov')
+    outpath = xypath.parent / (str(vidpath.stem) + '_cropped.mov')
     out = cv2.VideoWriter(str(outpath), fourcc, fps, (maxwidth, maxheight), True)
-    cv2.namedWindow('output')
+    #cv2.namedWindow('output')
 
     # look in the index to see if these are frame numbers, or paths to extracted images (from labeled data of DLC)
     if '.png' in bbdata.index[0]:
@@ -73,7 +80,7 @@ def main(vidpath, xypath):
                 ymin = bbdata.loc[i, (scorer, 'ul', 'y')]
                 ymax = bbdata.loc[i, (scorer, 'br', 'y')]
                 cropped[0: ymax-ymin, 0: xmax-xmin, :] = frame[ymin:ymax, xmin:xmax, :]
-                cv2.imshow('output', cropped)
+                #cv2.imshow('output', cropped)
         out.write(cropped)
         k = cv2.waitKey(waitvar) & 0xFF
         if k == 27:

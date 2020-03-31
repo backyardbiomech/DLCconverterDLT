@@ -19,7 +19,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 
-def main(opath, camlist, flipy, offsets):
+def main(opath, camlist, flipy, offsets, like):
     numcams = len(camlist)
     alldata = {}
     numframes = []
@@ -27,10 +27,16 @@ def main(opath, camlist, flipy, offsets):
     for c in range(numcams):
         #load the hd5
         camdata = pd.read_hdf(camlist[c], 'df_with_missing')
-        alldata[c] = camdata
         numframes.append(max(camdata.index.values) + 1)
+        # if the first camera, get the track names
         if c == 0:
             tracks = camdata.columns.get_level_values('bodyparts')
+            scorer = camdata.columns.get_level_values('scorer')[0]
+        # set x,y values with likelihoods below like to nan
+        # for each point
+        for track in set(tracks):
+            camdata.loc[camdata[scorer][track]['likelihood']<=like, (scorer, track, ['x', 'y'])] = np.nan
+        alldata[c] = camdata
     # initialize the massive array full of nans (with more than enough rows)
     arr = np.empty((max(numframes) - min(offsets), len(tracks)//3 * 2 * numcams)) * np.nan
     # loop through each camera's data and assign to the proper row
@@ -85,8 +91,9 @@ if __name__== '__main__':
 
     parser.add_argument('-dlctracks', nargs='+', help='input paths of DLC tracked coordinates (hd5) in order used in DLT calibration, each path separated by a space')
     parser.add_argument('-newpath', type=str, help = 'enter a path for saving, will overwrite if it already exists, should not be in DLC project folder, should end with filename prefix')
-    parser.add_argument('-flipy', default = True, help = 'flip y coordinates - necessar for Argus and DLTdv versions 1-7, set to False for DLTdv8')
+    parser.add_argument('-flipy', default=True, help = 'flip y coordinates - necessar for Argus and DLTdv versions 1-7, set to False for DLTdv8')
     parser.add_argument('-offsets', nargs='+', default = None, help='enter offsets as space separated list including first camera e.g.: -offsets 0 -12 2')
+    parser.add_argument('-like', default=0.9, help='enter the likelihood threshold - defaults to 0.9')
 
     args = parser.parse_args()
     if not args.offsets:
@@ -95,6 +102,6 @@ if __name__== '__main__':
         offsets = [int(x) for x in args.offsets]
         
     opath = Path(args.newpath)
-    opath.mkdir(parents = True, exist_ok = True)
+    # opath.mkdir(parents=True, exist_ok=True)
     
-    main(opath, args.dlctracks, args.flipy, offsets)
+    main(opath, args.dlctracks, args.flipy, offsets, args.like)

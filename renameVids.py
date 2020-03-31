@@ -35,7 +35,7 @@ import shutil
 def main(opath, pardir, vidlist, ext):
     if not vidlist:
         # search for all videos in parent
-        vidlist = list(pardir.glob('**/*.'+ ext))
+        vidlist = list(pardir.glob('**/*.' + ext))
     #     # save paths to vidlist
     for file in vidlist:
         file = Path(file)
