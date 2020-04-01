@@ -30,8 +30,7 @@ def main(fname, croplist, numcams, opath, flipy, offsets):
             ul.index = [int(re.findall(r'\d+', s)[0]) for s in new]
         # correct for offsets by reindexing, effectively inserting blank rows at the start or end of cropped
         ul.index = ul.index - offsets[c]
-        # make a copy df to work with, set all values to NaN
-        #TODO need to flip the Y - may be different for each camera! so requires loading the videos
+        #TODO need to flip the Y - may be different for each camera! so requires loading the videos, or add to dlt2dlc.py
         for i in range(int(len(xypts.columns)/(2*numcams))):
             icol = i * (2 * numcams) + (c * 2)
             # do the subtraction, indexes should take care of everything

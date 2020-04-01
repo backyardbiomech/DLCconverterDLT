@@ -20,10 +20,11 @@ import pandas as pd
 import numpy as np
 import cv2
 from pathlib import Path
+import re
 import warnings
 warnings.filterwarnings('ignore',category=pd.io.pytables.PerformanceWarning)
 
-def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
+def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, origvidpath):
     
     # load video
     cap = cv2.VideoCapture(str(vname))
@@ -32,7 +33,14 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
         int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
     width = size[0]
     height = size[1]
-    
+    if origvidpath:
+        cap2 = cv2.VideoCapture(str(origvidpath))
+        # get some info about the file (for flipy)
+        size = (int(cap2.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                int(cap2.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        width = size[0]
+        height = size[1]
+
     # load xypts file to dataframe
     xypts = pd.read_csv(fname)
             
@@ -41,8 +49,9 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
         # e.g. if offset = -5, a point digitized in the first frame of the video will be placed
         # on the 5th row of the xypts csv file, so negative offsets mean that many blank rows
         # need to be removed from the front of the df
+        print('dropping offset')
         xypts.drop(range(-1*offset), inplace=True)
-        xypts.reset_index(drop=True)
+        xypts.reset_index(drop=True, inplace=True)
     if offset > 0:
         # remove that many rows from the end of the df
         xypts.drop(range(len(xypts)-offset, len(xypts)), inplace=True)
@@ -65,10 +74,11 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
     # create a copy of just the relevant part of the data
     df = xypts.loc[frames, trackNames].copy()
 
-    if flipy:
+    if flipy is True:
         print('flipping')
         # flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
         ycols = [x for x in df.columns if '_y' in x]
+        print(height)
         df.loc[:, ycols] = height - df.loc[:, ycols]
 
     # get unique track names
@@ -79,17 +89,40 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset):
     
     # create the multi index header and apply it
     header = pd.MultiIndex.from_product([s,
-                                     colnames,
-                                     coords],
-                                    names=['scorer','bodyparts', 'coords'])
+                                         colnames,
+                                         coords],
+                                         names=['scorer', 'bodyparts', 'coords'])
 
-    df.columns=header
+    df.columns = header
+
+    # if a crop file has been passed, convert full coordinates to the cropped coordinates
+    if croppath:
+        dfnew = df.copy() * np.nan
+        cropped = pd.read_hdf(croppath, 'df_with_missing')
+        # get the scorer
+        scorer = cropped.columns.get_level_values('scorer')[0]
+        ul = cropped[scorer]['ul'][['x', 'y']]
+        # if it's analyzed data, index is already set as 0-indexed frame integer, do nothing
+        if cropped.index.dtype != 'int':
+            # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
+            new = [Path(x).stem for x in ul.index]
+            ul.index = [int(re.findall(r'\d+', s)[0]) for s in new]
+        # correct for offsets by reindexing, effectively inserting blank rows at the start or end of cropped
+        ul.index = ul.index - offset
+        # get tracks in new format
+        tracks = df.columns.get_level_values('bodyparts')[::2]
+        print(ul.columns)
+        for track in tracks:
+            dfnew.loc[dfnew.index.intersection(ul.index), (scorer, track)] = df.loc[dfnew.index.intersection(ul.index), (scorer, track)].values - ul.loc[dfnew.index.intersection(ul.index), :].values
+        df = dfnew
+
     # replace DLT nans with empty entries
     df.fillna('', inplace=True)
     indexPath = Path('labeled-data')
     indexPath = indexPath / vname.stem
 
-    df.rename(inplace = True, index = lambda s: str(indexPath / 'img{:04d}.png'.format(s)))
+    # use the index int values to make names since this should line up with frame numbers
+    df.rename(inplace=True, index=lambda s: str(indexPath / 'img{:04d}.png'.format(s)))
     # save out hdf and csv files
     df.to_hdf(opath / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
     df.to_csv(opath / ('CollectedData_' + scorer + '.csv'))
@@ -123,9 +156,11 @@ if __name__== '__main__':
     parser.add_argument('-numcams', default=3, help='enter number of cameras')
     parser.add_argument('-scorer', default='DLT', help='enter scorer name to match DLC project')
     parser.add_argument('-newpath', default = None, help = 'enter a path for saving, existing target folder will be overwritten, should end with "labeled-data/<videoname>"')
-    parser.add_argument('-flipy', default = True, help = 'flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
-    parser.add_argument('-offset', default = 0, type=int, help='enter offset of chosen camera as integer')
-    
+    parser.add_argument('-flipy', default=True, help='flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
+    parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
+    parser.add_argument('-crop',  default=None, help='input path to DLC crop file')
+    parser.add_argument('-origvid', default=None, help='input path to original video if adjusting cropped data')
+
     #TODO: add ability to pass frames for extraction instead of all frames?
 
     args = parser.parse_args()
@@ -134,6 +169,15 @@ if __name__== '__main__':
     vname = Path(args.vid)
     cnum = int(args.cnum)-1
     numcams = int(args.numcams)
+    if args.crop:
+        croppath = Path(args.crop)
+    else:
+        croppath = None
+
+    if args.origvid:
+        origvidpath = Path(args.origvid)
+    else:
+        origvidpath = None
 
     # make a new dir for output
     if not args.newpath:
@@ -141,6 +185,6 @@ if __name__== '__main__':
     else:
         opath = Path(args.newpath) / 'labeled-data' / vname.stem
     if not opath.exists():
-        opath.mkdir(parents = True, exist_ok = True)
+        opath.mkdir(parents=True, exist_ok=True)
     
-    main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset)
+    main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset, croppath, origvidpath)

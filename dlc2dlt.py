@@ -4,7 +4,7 @@ Takes dlc tracked coordinates (from <DLC_project_folder>/videos/<name>.hd5) file
 When passing the '-newpath' flag, input a full path ending with a filename prefix. e.g. /path/to/desired/folder/trial01
 will make trial01-xypts.csv, trial01-xyzpts.csv, trial01-xyzres.csv, trial01-offsets.csv
 
-That file can then be loaded into DLTdv* or Argus, along with the camera profile and DLT coefficents files. Saving data there then produces an updated -xyzpts.csv file.
+That file can then be loaded into DLTdv* or Argus, along with the camera profile and DLT coefficients files. Saving data there then produces an updated -xyzpts.csv file.
 
 Argus and DLTdv* also contain 3d_reconstruct commands that can be called on the command line with the xypts file output here.
 
@@ -18,24 +18,35 @@ import pandas as pd
 import numpy as np
 import cv2
 from pathlib import Path
+import re
 
 def main(opath, camlist, flipy, offsets, like):
     numcams = len(camlist)
     alldata = {}
     numframes = []
+    digi = True
     # load each data file get some basic info and store data in a dict
     for c in range(numcams):
         #load the hd5
         camdata = pd.read_hdf(camlist[c], 'df_with_missing')
-        numframes.append(max(camdata.index.values) + 1)
         # if the first camera, get the track names
         if c == 0:
             tracks = camdata.columns.get_level_values('bodyparts')
             scorer = camdata.columns.get_level_values('scorer')[0]
-        # set x,y values with likelihoods below like to nan
-        # for each point
-        for track in set(tracks):
-            camdata.loc[camdata[scorer][track]['likelihood']<=like, (scorer, track, ['x', 'y'])] = np.nan
+        # re-index if h5 is training style - index is paths to images instead of all frame numbers
+        if camdata.index.dtype != 'int':
+            # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
+            new = [Path(x).stem for x in camdata.index]
+            camdata.index = [int(re.findall(r'\d+', s)[0]) for s in new]
+            # add Nans for all missing indexes from 0 to numframes
+            camdata = camdata.reindex(range(0, camdata.index.max() + 1))
+            digi = False
+        else:
+            # set x,y values with likelihoods below like to nan
+            # for each point
+            for track in set(tracks):
+                camdata.loc[camdata[scorer][track]['likelihood'] <= like, (scorer, track, ['x', 'y'])] = np.nan
+        numframes.append(max(camdata.index.values) + 1)
         alldata[c] = camdata
     # initialize the massive array full of nans (with more than enough rows)
     arr = np.empty((max(numframes) - min(offsets), len(tracks)//3 * 2 * numcams)) * np.nan
@@ -52,9 +63,13 @@ def main(opath, camlist, flipy, offsets, like):
         outrows = list(range(max([0, 0-offsets[c]]), min([numframes[c], numframes[c]-offsets[c]]), 1))
         inrows = list(range(max([0, 0+offsets[c]]), min([numframes[c], numframes[c]+offsets[c]]), 1))
 
+        if digi is False:
+            iter = 2
+        else:
+            iter = 3
         # fill the array
-        for i in range(len(tracks)//3):
-            incol = i*3
+        for i in range(len(tracks)//iter):
+            incol = i*iter
             outcol = (i * 2 * numcams) + (2 * c)
             if flipy:
                 arr[outrows, outcol] = camdata.iloc[inrows, incol]
