@@ -24,7 +24,7 @@ import re
 import warnings
 warnings.filterwarnings('ignore',category=pd.io.pytables.PerformanceWarning)
 
-def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, origvidpath):
+def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, origvidpath, saveImgs):
     
     # load video
     cap = cv2.VideoCapture(str(vname))
@@ -43,6 +43,7 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, or
 
     # load xypts file to dataframe
     xypts = pd.read_csv(fname)
+    xypts = xypts.astype('float64')
             
     if offset < 0:
         # the DLT digitized value on the n-th row was actually digitized at n+offset frame
@@ -78,7 +79,6 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, or
         print('flipping')
         # flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
         ycols = [x for x in df.columns if '_y' in x]
-        print(height)
         df.loc[:, ycols] = height - df.loc[:, ycols]
 
     # get unique track names
@@ -108,10 +108,9 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, or
             new = [Path(x).stem for x in ul.index]
             ul.index = [int(re.findall(r'\d+', s)[0]) for s in new]
         # correct for offsets by reindexing, effectively inserting blank rows at the start or end of cropped
-        ul.index = ul.index - offset
+        #ul.index = ul.index - offset
         # get tracks in new format
         tracks = df.columns.get_level_values('bodyparts')[::2]
-        print(ul.columns)
         for track in tracks:
             dfnew.loc[dfnew.index.intersection(ul.index), (scorer, track)] = df.loc[dfnew.index.intersection(ul.index), (scorer, track)].values - ul.loc[dfnew.index.intersection(ul.index), :].values
         df = dfnew
@@ -123,24 +122,27 @@ def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, or
 
     # use the index int values to make names since this should line up with frame numbers
     df.rename(inplace=True, index=lambda s: str(indexPath / 'img{:04d}.png'.format(s)))
+    # replace blank cells with nan, and convert to float64 dtype
+    df = df.replace(r'^\s*$', np.nan, regex=True)
+
     # save out hdf and csv files
     df.to_hdf(opath / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
     df.to_csv(opath / ('CollectedData_' + scorer + '.csv'))
 
-
-    numfr = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    print("Writing images from video...")
-    # loop through frames
-    for fr in frames:
-        #set the start frame for analysis
-        cap.set(cv2.CAP_PROP_POS_MSEC, fr*1000/fps)
-        success, frame = cap.read()
-        if success:
-            # make file name
-            outimg = opath / ('img{:04d}.png'.format(fr))
-            #save image
-            cv2.imwrite(str(outimg), frame)
+    if saveImgs is True:
+        numfr = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        print("Writing images from video...")
+        # loop through frames
+        for fr in frames:
+            #set the start frame for analysis
+            cap.set(cv2.CAP_PROP_POS_MSEC, fr*1000/fps)
+            success, frame = cap.read()
+            if success:
+                # make file name
+                outimg = opath / ('img{:04d}.png'.format(fr))
+                #save image
+                cv2.imwrite(str(outimg), frame)
 
 
 
@@ -155,6 +157,7 @@ if __name__== '__main__':
     parser.add_argument('-cnum', default=1, help='enter 1-indexed camera number for extraction')
     parser.add_argument('-numcams', default=3, help='enter number of cameras')
     parser.add_argument('-scorer', default='DLT', help='enter scorer name to match DLC project')
+    parser.add_argument('-saveImgs', default=True, help='save images in "labeled-data" folder')
     parser.add_argument('-newpath', default = None, help = 'enter a path for saving, existing target folder will be overwritten, should end with "labeled-data/<videoname>"')
     parser.add_argument('-flipy', default=True, help='flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
     parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
@@ -187,4 +190,4 @@ if __name__== '__main__':
     if not opath.exists():
         opath.mkdir(parents=True, exist_ok=True)
     
-    main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset, croppath, origvidpath)
+    main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset, croppath, origvidpath,args.saveImgs)
