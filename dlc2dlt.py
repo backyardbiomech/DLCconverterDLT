@@ -34,7 +34,7 @@ def main(opath, camlist, flipy, offsets, like):
             tracks = camdata.columns.get_level_values('bodyparts')
             scorer = camdata.columns.get_level_values('scorer')[0]
         # re-index if h5 is training style - index is paths to images instead of all frame numbers
-        if camdata.index.dtype != 'int':
+        if camdata.index.dtype != np.int64:
             # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
             new = [Path(x).stem for x in camdata.index]
             camdata.index = [int(re.findall(r'\d+', s)[0]) for s in new]
