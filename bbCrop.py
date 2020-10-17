@@ -16,17 +16,22 @@ import numpy as np
 import pandas as pd
 
 def main(vidpath, xypath):
+    vidpath=Path(vidpath)
+    xypath=Path(xypath)
     # load xypts
+
     print('loading bb xypts')
     bbdata = pd.read_hdf(xypath, key='df_with_missing')
     bbdata=bbdata.replace('', 0)
     bbdata=bbdata.astype('float64')
     scorer = bbdata.columns.get_level_values('scorer')[0]
+    indivs = sorted(set(bbdata.columns.get_level_values('individuals')))
+
     # convert to ints
-    bbdata[scorer]['ul'] = np.floor(bbdata[scorer]['ul'])
-    bbdata[scorer]['br'] = np.ceil(bbdata[scorer]['br'])
+    bbdata[scorer][indivs[0]]['ul'] = np.floor(bbdata[scorer][indivs[0]]['ul'])
+    bbdata[scorer][indivs[0]]['br'] = np.ceil(bbdata[scorer][indivs[0]]['br'])
     # bbdata[bbdata == -1] = ''
-    bbdata = bbdata.astype(int)
+    #bbdata = bbdata.astype('int64')
     # save bbdata with these integers to use in cropped2full.py
     datapath = Path(xypath.parent) / (str(xypath.stem) + '_cropped')
     print('saving rounded data to {}'.format(str(datapath)))
@@ -35,9 +40,9 @@ def main(vidpath, xypath):
 
     # fill nans and make true int for opencv
     bbdata.fillna(0, inplace=True)
-
+    bbdata = bbdata.astype(int)
     # find maxwidth and maxheight
-    diff = bbdata[scorer]['br'] - bbdata[scorer]['ul']
+    diff = bbdata[scorer][indivs[0]]['br'] - bbdata[scorer][indivs[0]]['ul']
     maxwidth = (np.nanmax(diff['x']))
     maxheight = (np.nanmax(diff['y']))
 
@@ -51,13 +56,13 @@ def main(vidpath, xypath):
     fps = cap.get(cv2.CAP_PROP_FPS)
     print('video has {} frames'.format(numfr))
     # set up video writer with size and codecs
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    outpath = xypath.parent / (str(vidpath.stem) + '_cropped.mov')
+    fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+    outpath = xypath.parent / (str(vidpath.stem) + '_cropped.mp4')
     out = cv2.VideoWriter(str(outpath), fourcc, fps, (maxwidth, maxheight), True)
-    #cv2.namedWindow('output')
+   # cv2.namedWindow('output')
 
     # look in the index to see if these are frame numbers, or paths to extracted images (from labeled data of DLC)
-    if '.png' in bbdata.index[0]:
+    if bbdata.index.dtype != np.int64:
         im = [int(Path(x).stem[-4:]) for x in bbdata.index]
         bbdata.index = im
     else:
@@ -74,11 +79,12 @@ def main(vidpath, xypath):
             print('failed to load frame: ', i)
         else:
             # get coords if they all exist
-            if (i in im) and np.count_nonzero(bbdata.loc[i]) == 4:
-                xmin = bbdata.loc[i, (scorer, 'ul', 'x')]
-                xmax = bbdata.loc[i, (scorer, 'br', 'x')]
-                ymin = bbdata.loc[i, (scorer, 'ul', 'y')]
-                ymax = bbdata.loc[i, (scorer, 'br', 'y')]
+            if (i in im):# and np.count_nonzero(bbdata.loc[i]) == 4:
+                print('here')
+                xmin = bbdata.loc[i, (scorer, indivs[0], 'ul', 'x')]
+                xmax = bbdata.loc[i, (scorer, indivs[0], 'br', 'x')]
+                ymin = bbdata.loc[i, (scorer, indivs[0], 'ul', 'y')]
+                ymax = bbdata.loc[i, (scorer, indivs[0], 'br', 'y')]
                 cropped[0: ymax-ymin, 0: xmax-xmin, :] = frame[ymin:ymax, xmin:xmax, :]
                 #cv2.imshow('output', cropped)
         out.write(cropped)
