@@ -29,12 +29,13 @@ def main(opath, camlist, flipy, offsets, like):
     for c in range(numcams):
         #load the hd5
         camdata = pd.read_hdf(camlist[c], 'df_with_missing')
-        # if the first camera, get the track names
-        if c == 0:
+        #get track names from first camera
+        if c== 0:
             tracks = camdata.columns.get_level_values('bodyparts')
-            scorer = camdata.columns.get_level_values('scorer')[0]
+        # allow different "scorer"s if different DLC models were used on each camera
+        scorer = camdata.columns.get_level_values('scorer')[0]
         # re-index if h5 is training style - index is paths to images instead of all frame numbers
-        if camdata.index.dtype != 'int':
+        if camdata.index.dtype != np.int64:
             # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
             new = [Path(x).stem for x in camdata.index]
             camdata.index = [int(re.findall(r'\d+', s)[0]) for s in new]
