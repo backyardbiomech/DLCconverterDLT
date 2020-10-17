@@ -4,9 +4,9 @@ A small set of utilities that allow conversion between the data storage formats 
 
 While DLC has 3D capabilities (using checkerboards), many field-based setups necessitate the ability to use a wand calibration (easywand or Argus). DLC can be used to auto-track the wand and/or subjects in each video (treated as separate 2D videos), then moved back to DLT for 3d reconstruction. 
 
-Multi-camera setups that are not frame-synced (e.g. GoPros) must have offsets calculated (Argus), and adjusted for. These scripts account for those offset values.
+Multi-camera setups that are not frame-synced (e.g. GoPros) must have offsets calculated (Argus), and adjusted for. These scripts use those offset values.
 
-As a bonus (i.e. because I needed it), I'm also including bbCrop.py to allow digitizing (labeling) of a bounding box (upperleft - 'ul', and bottom right - 'br') to produced individual images cropped to that bounding box. These images could then be trained and analyzed in DLC. Those output coordinates can then be put back into the full video resolution with cropped2full.py for full 2d coordinates, or processed with dlc2dlt.py to be brought back into a DLT system for 3D coordinates.
+As a bonus (i.e. because I needed it), I'm also including bbCrop.py to allow digitizing (labeling) of a bounding box (upperleft - 'ul', and bottom right - 'br') to produce videos dynamically cropped to that bounding box. These images could then be trained and analyzed in DLC. Those output coordinates can then be put back into the full video resolution with cropped2full.py for full 2d coordinates, or processed with dlc2dlt.py to be brought back into a DLT system for 3D coordinates.
 
 **NOTE**: As of 6 February, 2020, these "work" in so far as they produce files that look like they have the correct format without spitting out errors, and they have been *minimally* tested on sample data. They have *not* been tested in a complete workflow to make sure that everything matches up where it should. Be especially careful to make sure your data lines up on the appropriate frame of video, and that frame offsets are working correctly. Please feel free to test, edit, contribute, suggest. Consider these a first draft!
 
@@ -16,9 +16,19 @@ Once they are well tested, I will include these functions directly in Argus, and
 
 Download the scripts. Put them somewhere handy. Call them on the command-line.  See below.
 
-## Usage
+## Usage ouline:
+1. The videos used for training DeepLabCut must have unique names. If, like me, your DLT videos are all named cam1.mp4, cam2.mp4, etc, `renameVids.py` will help give unique names.
+2. If you have data digitized in a DLT program that you want to use as labelled data in DLC, us `dlt2dlc.py`
+3. Train DLC, and analyze your videos.
+    1. If you are analyzing bounding boxes, get those coordinates from DLC for a video and run `bbCrop.py` to make a cropped video.
+    2. You can then use `dlt2cropped.py` to "crop" any coordinates you digitized in DLT, then pass to DLC for training. 
+    3. Analyze your cropped videos in DLC
+    4. Use `cropped2full.py` to "uncrop" the DLC generated coordinates back to full resolution coordinates
+4. Use `dlc2dlt.py` to convert DLC coordinates back to DLT style coordinates
+5. In your DLT program (Argus or DLTdv), either load the videos and new data, or use command line functions in each to perform the 3d reconstruction with your dlt coefficients.  
+## Detailed Usage
 
-For both functions, the flag `-flipy` will default to `True` which is necessary if your data are from Argus or DLTdv versions prior to 8.0. In those packages, the coordinate origin is in the lower left of the video, but the computer vision standard (used by DeepLabCut and by DLTdv8) is for the origin to be in the **upper** left. If you are using DLTdv8, just add `-flipy False` to the call.
+For both functions, the flag `-flipy` will default to `True` which is necessary if your data are from Argus, or DLTdv versions prior to 8.0. In those packages, the coordinate origin is in the lower left of the video, but the computer vision standard (used by DeepLabCut and by DLTdv8) is for the origin to be in the **upper** left. If you are using DLTdv8, just add `-flipy False` to the call.
 
 ### dlt2dlc
 
