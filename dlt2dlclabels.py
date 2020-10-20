@@ -5,6 +5,11 @@ i.e., it skips the label frames DLC step
 
 works for multianimal projects, but considers all labels to apply to individual 1
 
+VERY IMPORTANT: Argus/DLTdv track names must exactly match DLC bodyparts in config for this to work
+
+Works when no collected data file exists 20 Oct 2020, need to test when it exists already and more frames are extracted
+
+
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
 Last edited: 17 Oct 2020
@@ -26,8 +31,8 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
     # make paths into Paths
     config=Path(config)
     #load dlc config
-    cfg=read_config(config)
-    scorer = [cfg['scorer']]
+    cfg = read_config(config)
+    scorer = cfg['scorer']
     individuals = cfg['individuals']
     bodyparts = cfg['multianimalbodyparts']
     coords = ['x', 'y']
@@ -41,17 +46,12 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
     camstr = 'cam_{}_'.format(cnum)
     thiscam = [x for x in xypts.columns if camstr in x]
     xypts = xypts[thiscam]
-    newcols = []
+    newcols = {}
+    #store track name and column index - start of tracks - in dict
     for i in range(0, len(xypts.columns), 2):
         newcol = xypts.columns[i].split('_')[0]
-        newcols.extend(newcol)
-    #TODO: need to figure out multiindexing for xypts to make it easier to move data into labeled data frame
-    header = pd.MultiIndex.from_product([scorer,
-                                         individuals,
-                                         newcols,
-                                         coords],
-                                        names=['scorer', 'individuals', 'bodyparts', 'coords'])
-    # load labeled data from extracted frames
+        newcols[newcol]=i
+
     #find ./CollectedData_scorerintitials.h5 in labdir
     colldata = list(labdir.glob('**/CollectedData_*.h5'))
 
@@ -65,7 +65,7 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
         index = ['labeled-data/{}/{}'.format(camname,im.name) for im in imgs]
         # build the empty df
         # get tracknames from cfg
-        header = pd.MultiIndex.from_product([scorer,
+        header = pd.MultiIndex.from_product([[scorer],
                                              individuals,
                                              bodyparts,
                                              coords],
@@ -74,19 +74,6 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
         #get frame numbers from imgs, from full path, after img, before .png
         idx = [int(re.findall(r'\d+', s)[0]) for s in [x.stem for x in imgs]]
         df = pd.DataFrame(np.nan, columns=header, index=index)
-        # replace DLT nans with empty entries
-        # df.fillna('', inplace=True)
-        # get the values for each body part for each frame from DLT data
-        print(df)
-        # indexPath = Path('labeled-data')
-        # indexPath = indexPath / vname.stem
-        #
-        # # use the index int values to make names since this should line up with frame numbers
-        # df.rename(inplace=True, index=lambda s: str(indexPath / 'img{:04d}.png'.format(s)))
-        # # replace blank cells with nan, and convert to float64 dtype
-        # df = df.replace(r'^\s*$', np.nan, regex=True)
-    #
-    # df.columns = header
 
 
     else:
@@ -94,14 +81,13 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
         #load the file
         df = pd.read_hdf(colldata[0], 'df_with_missing')
 
-        #get track names, scorer, first individual name
-        scorer = camdata.columns.get_level_values('scorer')[0]
-        ind = cam.data.columns.get_level_values('individuals')[0]
-        tracks = camdata[scorer][ind].columns.get_level_values('bodyparts')
+        #get track names, scorer, first individual name (all gotten from config now?
+        # scorer = df.columns.get_level_values('scorer')[0]
+        # ind = df.columns.get_level_values('individuals')[0]
+        # tracks = df[scorer][ind].columns.get_level_values('bodyparts')
         print(scorer, ind, tracks)
-        # find tracks already labeled so as to not overwrite of
-        # find extracted frames that have no labelled data
-        index = ['labeled-data/{}/{}'.format(camname,im.name) for im in imgs]
+
+        index = ['labeled-data/{}/{}'.format(camname, im.name) for im in imgs]
         news = []
         for im in index:
             if im not in df.index.values:
@@ -118,33 +104,44 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
         print('dropping offset')
         xypts.drop(range(-1 * offset), inplace=True)
         xypts.reset_index(drop=True, inplace=True)
+
     if offset > 0:
         # remove that many rows from the end of the df
         xypts.drop(range(len(xypts) - offset, len(xypts)), inplace=True)
 
     # go through df find indexes without any entries, extract those entries from xydata, and add
-    #something like this
-    news = df.loc[df.isna().all(axis=0)].index.values
 
-    # in theory, df and
+    news = df.index[df.isnull().all(1)]
+
+    # go through news and get insert digitized points from xydata
+    for new in news:
+        for bp in bodyparts:
+            xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
+            df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+
+    # replace DLT nans with empty entries
+    df.fillna('', inplace=True)
+    # # save out hdf and csv files
+    df.to_hdf(Path(labdir) / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
+    df.to_csv(Path(labdir) / ('CollectedData_' + scorer + '.csv'))
 
     # make Set of frames to be extracted (they have digitized points), and get tracknames
-    frames = []
-    trackNames = []
-    for i in range(int(len(xypts.columns) / (2 * numcams))):
-        icol = i * (2 * numcams) + (cnum * 2)
-        arr = xypts.iloc[:, icol]
-        frs = list(np.where(np.isfinite(arr))[0])
-        frames += frs
-        # get the track name
-        if len(frs) > 0:
-            trackNames.append(xypts.columns[icol])
-            trackNames.append(xypts.columns[icol + 1])
-
-    # get zero-indexed frame numbers that have digitized points in this camera
-    frames = sorted(set(frames))
-    # create a copy of just the relevant part of the data
-    df = xypts.loc[frames, trackNames].copy()
+    # frames = []
+    # trackNames = []
+    # for i in range(int(len(xypts.columns) / (2 * numcams))):
+    #     icol = i * (2 * numcams) + (cnum * 2)
+    #     arr = xypts.iloc[:, icol]
+    #     frs = list(np.where(np.isfinite(arr))[0])
+    #     frames += frs
+    #     # get the track name
+    #     if len(frs) > 0:
+    #         trackNames.append(xypts.columns[icol])
+    #         trackNames.append(xypts.columns[icol + 1])
+    #
+    # # get zero-indexed frame numbers that have digitized points in this camera
+    # frames = sorted(set(frames))
+    # # create a copy of just the relevant part of the data
+    # df = xypts.loc[frames, trackNames].copy()
 
     # if flipy is True:
     #     print('flipping')
