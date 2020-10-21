@@ -26,7 +26,6 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
-# TODO: set up to work with existing labeled data folder with NEWly extracted frames
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
 # TODO: set up to pull "added points" (as an optional flag)
 # TODO: add flag to assign to specific individual (assuming separate xypts.csv files for each individual by passing individual name from config
@@ -92,7 +91,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
         # scorer = df.columns.get_level_values('scorer')[0]
         # ind = df.columns.get_level_values('individuals')[0]
         # tracks = df[scorer][ind].columns.get_level_values('bodyparts')
-        print(scorer, ind, tracks)
+        #print(scorer, ind, tracks)
 
         # index = ['labeled-data/{}/{}'.format(camname, im.name) for im in imgs]
         # news = []
@@ -101,7 +100,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
         #         news.extend(im)
         # foo = pd.DataFrame(np.nan, columns=header, index=news)
         # df.append(foo, inplace=True)
-        # df.sort_index(inplace=True)
+        df.sort_index(inplace=True)
 
     if offset < 0:
         # the DLT digitized value on the n-th row was actually digitized at n+offset frame
@@ -139,6 +138,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
 
     # replace DLT nans with empty entries for DLC formatting
     df.astype('float64')
+    df.sort_index(inplace=True)
     #df.fillna('', inplace=True)
 
     # # save out hdf and csv files
