@@ -26,13 +26,12 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
-# TODO: handle flipy by getting video resolution from config (what if cropped was used? correct for that?)
 # TODO: set up to work with existing labeled data folder with NEWly extracted frames
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
 # TODO: set up to pull "added points" (as an optional flag)
 # TODO: add flag to assign to specific individual (assuming separate xypts.csv files for each individual by passing individual name from config
 
-def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
+def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
     # make paths into Paths
     config=Path(config)
     #load dlc config
@@ -42,6 +41,9 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
     bodyparts = cfg['multianimalbodyparts']
     coords = ['x', 'y']
     xyfname=Path(xyfname)
+
+    vid=Path(vid)
+    camname=vid.stem
     labdir = Path(cfg['project_path']) / 'labeled-data' / camname
 
     # load xypts file to dataframe
@@ -114,6 +116,15 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
         # remove that many rows from the end of the df
         xypts.drop(range(len(xypts) - offset, len(xypts)), inplace=True)
 
+
+    if flipy is True:
+        print('flipping')
+        # get the vertical resolution from cropped parameter in config
+        height = int(cfg['video_sets'][str(vid)]['crop'].split(',')[3])
+        # flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
+        ycols = [x for x in xypts.columns if '_y' in x]
+        xypts.loc[:, ycols] = height - xypts.loc[:, ycols]
+
     # go through df find indexes without any entries, extract those entries from xydata, and add
 
     news = df.index[df.isnull().all(1)]
@@ -124,10 +135,14 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
             xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
             df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
 
+
+
     # replace DLT nans with empty entries for DLC formatting
-    df.fillna('', inplace=True)
+    df.astype('float64')
+    #df.fillna('', inplace=True)
+
     # # save out hdf and csv files
-    df.to_hdf(Path(labdir) / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
+    df.to_hdf(Path(labdir) / ('CollectedData_' + scorer + '.h5'), 'df_with_missing', format='table', mode='w')
     df.to_csv(Path(labdir) / ('CollectedData_' + scorer + '.csv'))
 
     # make Set of frames to be extracted (they have digitized points), and get tracknames
@@ -148,11 +163,7 @@ def dlt2dlclabels(config, xyfname, camname, cnum, numcams, flipy, offset):
     # # create a copy of just the relevant part of the data
     # df = xypts.loc[frames, trackNames].copy()
 
-    # if flipy is True:
-    #     print('flipping')
-    #     # flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
-    #     ycols = [x for x in df.columns if '_y' in x]
-    #     df.loc[:, ycols] = height - df.loc[:, ycols]
+
 
     # # get unique track names
     # colnames = [x.split('_cam')[0] for x in trackNames[0:-1:2]]
@@ -229,19 +240,12 @@ if __name__ == '__main__':
     parser.add_argument('-config', help='input path to DLC config file')
     parser.add_argument('-xy',
                         help='input path to xypts file')
-    parser.add_argument('-camname', help='directory name in labeled-data in DLC project')
-    #parser.add_argument('-vid', help='input path to video file')
+    parser.add_argument('-vid', help='input path to video file')
     parser.add_argument('-cnum', default=1, help='enter 1-indexed camera number for extraction')
     parser.add_argument('-numcams', default=3, help='enter number of cameras')
-    #parser.add_argument('-scorer', default='DLT', help='enter scorer name to match DLC project')
-    #parser.add_argument('-saveImgs', default=True, help='save images in "labeled-data" folder')
-    #parser.add_argument('-newpath', default=None,
-    #                    help='enter a path for saving, existing target folder will be overwritten, should end with "labeled-data/<videoname>"')
     parser.add_argument('-flipy', default=True,
                         help='flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
     parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
-    #parser.add_argument('-crop', default=None, help='input path to DLC crop file')
-    #parser.add_argument('-origvid', default=None, help='input path to original video if adjusting cropped data')
 
     # TODO: add ability to pass frames for extraction instead of all frames?
 
@@ -252,24 +256,5 @@ if __name__ == '__main__':
     #vname = Path(args.vid)
     cnum = int(args.cnum) - 1
     numcams = int(args.numcams)
-    # if args.crop:
-    #     croppath = Path(args.crop)
-    # else:
-    #     croppath = None
-    #
-    # if args.origvid:
-    #     origvidpath = Path(args.origvid)
-    # else:
-    #     origvidpath = None
 
-    # make a new dir for output
-    # if not args.newpath:
-    #     opath = vname.parent / 'labeled-data' / vname.stem
-    # else:
-    #     opath = Path(args.newpath) / 'labeled-data' / vname.stem
-    # if not opath.exists():
-    #     opath.mkdir(parents=True, exist_ok=True)
-
-    # dlt2dlclabels(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset, croppath, origvidpath,
-    #         args.saveImgs)
-    dlt2dlclabels(config, xyfname, camname, cnum, numcams, args.flipy, int(args.offset))
+    dlt2dlclabels(config, xyfname, vid, cnum, numcams, args.flipy, int(args.offset))
