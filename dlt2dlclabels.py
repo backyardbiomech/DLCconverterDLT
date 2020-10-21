@@ -1,24 +1,28 @@
 """
-After extracting frames (which creates images and labeled data h5 and csv files) in a dlc project, this pulls labels for those frames from DLTdv or Argus based DLT 3D projects and saves to the dlc project
+This is a simpler function that uses data digitized in Argus or DLTdv and applies it as labels to extracted frames in DLC.
+IMPORTANT: use deeplabcut to create a project, add videos, and extract the frames. Use this simply to bypass the label_frames function of deeplabcut.
+Extracting frames  in deeplabcut creates images in the labeled-data folder in a dlc project
+This function pulls labels for those frames from DLTdv or Argus based DLT 3D projects, one camera at a time.
 
-i.e., it skips the label frames DLC step
+This is written to only work with deeplabcut multianimal projects (even if only one individual animal)
+and for now it considers all labels to apply to individual 1, so only pass it videos with one animal in view
+After running, you can open the labeling GUI in deeplabcut to check, edit, and add labels, or run dlc.check_labels to make sure everything imported properly.
 
-works for multianimal projects, but considers all labels to apply to individual 1
+VERY IMPORTANT: Argus/DLTdv track names must exactly match DLC bodyparts (in config) for this to work. You can edit config or the xypts.csv file header to make them match if you need.
 
-VERY IMPORTANT: Argus/DLTdv track names must exactly match DLC bodyparts in config for this to work
-
-Works when no collected data file exists 20 Oct 2020, need to test when it exists already and more frames are extracted
+If you go back to Argus/DLTdv and digitize new frames/points, you have two options
+1. delete the Collected_Data_...h5 file in labeled-data/camerafolder to fully reimport. This is your only option if you "correct" points in Argus/DLT
+2. If you are adding points from DLT, but already made corrections in the label frames GUI in DLC, add -addbp to the command line call
 
 
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
-Last edited: 17 Oct 2020
+Last edited: 21 Oct 2020
 """
 
 import argparse
 import pandas as pd
 import numpy as np
-import cv2
 from pathlib import Path
 import re
 import warnings
@@ -27,10 +31,9 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
-# TODO: set up to pull "added points" (as an optional flag)
 # TODO: add flag to assign to specific individual (assuming separate xypts.csv files for each individual by passing individual name from config
 
-def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
+def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
     # make paths into Paths
     config=Path(config)
     #load dlc config
@@ -86,20 +89,6 @@ def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
         # the file has already been created
         #load the file
         df = pd.read_hdf(colldata[0], 'df_with_missing')
-
-        #get track names, scorer, first individual name (all gotten from config now?
-        # scorer = df.columns.get_level_values('scorer')[0]
-        # ind = df.columns.get_level_values('individuals')[0]
-        # tracks = df[scorer][ind].columns.get_level_values('bodyparts')
-        #print(scorer, ind, tracks)
-
-        # index = ['labeled-data/{}/{}'.format(camname, im.name) for im in imgs]
-        # news = []
-        # for im in index:
-        #     if im not in df.index.values:
-        #         news.extend(im)
-        # foo = pd.DataFrame(np.nan, columns=header, index=news)
-        # df.append(foo, inplace=True)
         df.sort_index(inplace=True)
 
     if offset < 0:
@@ -124,114 +113,46 @@ def dlt2dlclabels(config, xyfname, vid, cnum, numcams, flipy, offset):
         ycols = [x for x in xypts.columns if '_y' in x]
         xypts.loc[:, ycols] = height - xypts.loc[:, ycols]
 
-    # go through df find indexes without any entries, extract those entries from xydata, and add
 
-    news = df.index[df.isnull().all(1)]
 
-    # go through news and get insert digitized points from xydata
-    for new in news:
+    # make if option flag is thrown, it checks if any bodypart x/y is empty
+    if addbp:
+        newbp=[]
+        indx=[]
         for bp in bodyparts:
-            xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
-            df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+            #isolate the bodypart
+            _ = df.loc[:, (scorer, individuals[0], bp)]
+            #find empty rows
+            r = _.index[_.isnull().all(1)]
+            #if there are empty rows for that bp
+            if len(r) > 0:
+                # add to list of places to fill
+                newbp.extend([bp] * len(r))
+                indx.extend(r)
+        news = list(zip(indx, newbp))
+        for new in news:
+            xyrow = int(re.findall(r'img(\d+)\.png', new[0])[0])
+            bp = new[1]
+            df.loc[new[0], (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+
+    else:
+        # go through df find indexes without any entries, extract those entries from xydata, and add
+        news = df.index[df.isnull().all(1)]
+        # go through news and get insert digitized points from xydata
+        for new in news:
+            for bp in bodyparts:
+                xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
+                df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
 
 
 
     # replace DLT nans with empty entries for DLC formatting
     df.astype('float64')
     df.sort_index(inplace=True)
-    #df.fillna('', inplace=True)
 
     # # save out hdf and csv files
     df.to_hdf(Path(labdir) / ('CollectedData_' + scorer + '.h5'), 'df_with_missing', format='table', mode='w')
     df.to_csv(Path(labdir) / ('CollectedData_' + scorer + '.csv'))
-
-    # make Set of frames to be extracted (they have digitized points), and get tracknames
-    # frames = []
-    # trackNames = []
-    # for i in range(int(len(xypts.columns) / (2 * numcams))):
-    #     icol = i * (2 * numcams) + (cnum * 2)
-    #     arr = xypts.iloc[:, icol]
-    #     frs = list(np.where(np.isfinite(arr))[0])
-    #     frames += frs
-    #     # get the track name
-    #     if len(frs) > 0:
-    #         trackNames.append(xypts.columns[icol])
-    #         trackNames.append(xypts.columns[icol + 1])
-    #
-    # # get zero-indexed frame numbers that have digitized points in this camera
-    # frames = sorted(set(frames))
-    # # create a copy of just the relevant part of the data
-    # df = xypts.loc[frames, trackNames].copy()
-
-
-
-    # # get unique track names
-    # colnames = [x.split('_cam')[0] for x in trackNames[0:-1:2]]
-    # # some standard multi-index headers for DLC compatability
-    # s = [scorer]
-    # coords = ['x', 'y']
-    #
-    # # create the multi index header and apply it
-    # header = pd.MultiIndex.from_product([s,
-    #                                      colnames,
-    #                                      coords],
-    #                                     names=['scorer', 'bodyparts', 'coords'])
-    #
-    # df.columns = header
-    #
-    # # if a crop file has been passed, convert full coordinates to the cropped coordinates
-    # if croppath:
-    #     dfnew = df.copy() * np.nan
-    #     cropped = pd.read_hdf(croppath, 'df_with_missing')
-    #     # get the scorer
-    #     scorer = cropped.columns.get_level_values('scorer')[0]
-    #     ul = cropped[scorer]['ul'][['x', 'y']]
-    #     # if it's analyzed data, index is already set as 0-indexed frame integer, do nothing
-    #     if cropped.index.dtype != 'int':
-    #         # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
-    #         new = [Path(x).stem for x in ul.index]
-    #         ul.index = [int(re.findall(r'\d+', s)[0]) for s in new]
-    #     # correct for offsets by reindexing, effectively inserting blank rows at the start or end of cropped
-    #     # ul.index = ul.index - offset
-    #     # get tracks in new format
-    #     tracks = df.columns.get_level_values('bodyparts')[::2]
-    #     for track in tracks:
-    #         dfnew.loc[dfnew.index.intersection(ul.index), (scorer, track)] = df.loc[
-    #                                                                              dfnew.index.intersection(ul.index), (
-    #                                                                              scorer, track)].values - ul.loc[
-    #                                                                                                       dfnew.index.intersection(
-    #                                                                                                           ul.index),
-    #                                                                                                       :].values
-    #     df = dfnew
-    #
-    # # replace DLT nans with empty entries
-    # df.fillna('', inplace=True)
-    # indexPath = Path('labeled-data')
-    # indexPath = indexPath / vname.stem
-    #
-    # # use the index int values to make names since this should line up with frame numbers
-    # df.rename(inplace=True, index=lambda s: str(indexPath / 'img{:04d}.png'.format(s)))
-    # # replace blank cells with nan, and convert to float64 dtype
-    # df = df.replace(r'^\s*$', np.nan, regex=True)
-    #
-    # # save out hdf and csv files
-    # df.to_hdf(opath / ('CollectedData_' + scorer + '.h5'), key='df_with_missing', mode='w')
-    # df.to_csv(opath / ('CollectedData_' + scorer + '.csv'))
-    #
-    # if saveImgs is True:
-    #     numfr = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    #     fps = cap.get(cv2.CAP_PROP_FPS)
-    #     print("Writing images from video...")
-    #     # loop through frames
-    #     for fr in frames:
-    #         # set the start frame for analysis
-    #         cap.set(cv2.CAP_PROP_POS_MSEC, fr * 1000 / fps)
-    #         success, frame = cap.read()
-    #         if success:
-    #             # make file name
-    #             outimg = opath / ('img{:04d}.png'.format(fr))
-    #             # save image
-    #             cv2.imwrite(str(outimg), frame)
 
 
 if __name__ == '__main__':
@@ -242,12 +163,11 @@ if __name__ == '__main__':
                         help='input path to xypts file')
     parser.add_argument('-vid', help='input path to video file')
     parser.add_argument('-cnum', default=1, help='enter 1-indexed camera number for extraction')
-    parser.add_argument('-numcams', default=3, help='enter number of cameras')
     parser.add_argument('-flipy', default=True,
                         help='flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
     parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
+    parser.add_argument('-addbp', default=False, help='if new tracks/bodyparts were digitized in Argus/DLTdv, add this flag to add those to labeled data')
 
-    # TODO: add ability to pass frames for extraction instead of all frames?
 
     args = parser.parse_args()
 
@@ -257,4 +177,5 @@ if __name__ == '__main__':
     cnum = int(args.cnum) - 1
     numcams = int(args.numcams)
 
-    dlt2dlclabels(config, xyfname, vid, cnum, numcams, args.flipy, int(args.offset))
+    dlt2dlclabels(config, xyfname, vid, cnum, int(args.offset), flipy=args.flipy, addbp=args.addbp)
+
