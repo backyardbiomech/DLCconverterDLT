@@ -10,6 +10,8 @@ As a bonus (i.e. because I needed it), I'm also including bbCrop.py to allow dig
 
 **NOTE**: As of 6 February, 2020, these "work" in so far as they produce files that look like they have the correct format without spitting out errors, and they have been *minimally* tested on sample data. They have *not* been tested in a complete workflow to make sure that everything matches up where it should. Be especially careful to make sure your data lines up on the appropriate frame of video, and that frame offsets are working correctly. Please feel free to test, edit, contribute, suggest. Consider these a first draft!
 
+**NOTE**: As of 21 October, 2020, I am working on converting these to work with multianimal DLC, and cleaning up a few bugs. 
+
 Once they are well tested, I will include these functions directly in Argus, and I'm sure a similar set of MATLAB scripts will find their way into DLTdv8.
 
 ## Getting Started
@@ -18,13 +20,15 @@ Download the scripts. Put them somewhere handy. Call them on the command-line.  
 
 ## Usage ouline:
 1. The videos used for training DeepLabCut must have unique names. If, like me, your DLT videos are all named cam1.mp4, cam2.mp4, etc, `renameVids.py` will help give unique names.
-2. If you have data digitized in a DLT program that you want to use as labelled data in DLC, us `dlt2dlc.py`
+2. If you have data digitized in a DLT program that you want to use as labelled data in DLC:
+    1. use `dlt2dlc.py` if you want to extract frames and labels from your videos. This gets complicated and might be buggy
+    2. Use DLC to add videos to project and extract frames, and use `dlt2dlclabels.py` (simpler, more stable) to skip the DLC labeling GUI. This requires a "multianimal" project with only one animal labeled (as of 20 Oct. 2020), and DLT track names must exactly match bodyparts in DLC config.
 3. Train DLC, and analyze your videos.
-    1. If you are analyzing bounding boxes, get those coordinates from DLC for a video and run `bbCrop.py` to make a cropped video.
+    1. If you are analyzing bounding boxes (EDIT: probably don't do this...), get those coordinates from DLC for a video and run `bbCrop.py` to make a cropped video.
     2. You can then use `dlt2cropped.py` to "crop" any coordinates you digitized in DLT, then pass to DLC for training. 
     3. Analyze your cropped videos in DLC
     4. Use `cropped2full.py` to "uncrop" the DLC generated coordinates back to full resolution coordinates
-4. Use `dlc2dlt.py` to convert DLC coordinates back to DLT style coordinates
+4. Use `dlc2dlt.py` to convert DLC coordinates back to DLT style coordinates (this is not yet working with multianimal projects, but will soon!)
 5. In your DLT program (Argus or DLTdv), either load the videos and new data, or use command line functions in each to perform the 3d reconstruction with your dlt coefficients.  
 ## Detailed Usage
 

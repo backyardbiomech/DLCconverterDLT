@@ -39,8 +39,12 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
     #load dlc config
     cfg = read_config(config)
     scorer = cfg['scorer']
-    individuals = cfg['individuals']
-    bodyparts = cfg['multianimalbodyparts']
+    ma = True if cfg['multianimalproject'] == 'true' else False
+    if ma:
+        individuals = cfg['individuals']
+        bodyparts = cfg['multianimalbodyparts']
+    else:
+        bodyparts=cfg['bodyparts']
     coords = ['x', 'y']
     xyfname=Path(xyfname)
 
@@ -74,11 +78,17 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
         index = ['labeled-data/{}/{}'.format(camname,im.name) for im in imgs]
         # build the empty df
         # get tracknames from cfg
-        header = pd.MultiIndex.from_product([[scorer],
+        if ma:
+            header = pd.MultiIndex.from_product([[scorer],
                                              individuals,
                                              bodyparts,
                                              coords],
                                              names=['scorer', 'individuals','bodyparts', 'coords'])
+        else:
+            header = pd.MultiIndex.from_product([[scorer],
+                                                 bodyparts,
+                                                 coords],
+                                                names=['scorer', 'bodyparts', 'coords'])
         #copy just the rows of interest from DLT to a new df
         #get frame numbers from imgs, from full path, after img, before .png
         idx = [int(re.findall(r'\d+', s)[0]) for s in [x.stem for x in imgs]]
@@ -121,7 +131,10 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
         indx=[]
         for bp in bodyparts:
             #isolate the bodypart
-            _ = df.loc[:, (scorer, individuals[0], bp)]
+            if ma:
+                _ = df.loc[:, (scorer, individuals[0], bp)]
+            else:
+                _ = df.loc[:, (scorer, bp)]
             #find empty rows
             r = _.index[_.isnull().all(1)]
             #if there are empty rows for that bp
@@ -133,7 +146,12 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
         for new in news:
             xyrow = int(re.findall(r'img(\d+)\.png', new[0])[0])
             bp = new[1]
-            df.loc[new[0], (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+            if ma:
+                df.loc[new[0], (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[
+                    xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+            else:
+                df.loc[new[0], (scorer, bp, ['x', 'y'])] = xypts.loc[
+                    xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
 
     else:
         # go through df find indexes without any entries, extract those entries from xydata, and add
@@ -142,7 +160,12 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
         for new in news:
             for bp in bodyparts:
                 xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
-                df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                if ma:
+                    df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[
+                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                else:
+                    df.loc[new, (scorer, bp, ['x', 'y'])] = xypts.loc[
+                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
 
 
 
