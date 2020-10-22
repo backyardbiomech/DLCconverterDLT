@@ -17,7 +17,7 @@ If you go back to Argus/DLTdv and digitize new frames/points, you have two optio
 
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
-Last edited: 21 Oct 2020
+Last edited: 22 Oct 2020
 """
 
 import argparse
@@ -32,6 +32,7 @@ warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
 # TODO: add flag to assign to specific individual (assuming separate xypts.csv files for each individual by passing individual name from config
+# TODO: add check if DLC extracted frame is not in xypts (after digitizing? or offset caused index error seen with last frame?)
 
 def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
     # make paths into Paths
@@ -41,7 +42,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
     camname=vid.stem
 
     #cnum is entered as 1-indexed so correct for 0-indexed
-    cnum -= 1
+    #cnum -= 1
 
     #load dlc config
     cfg = read_config(config)
