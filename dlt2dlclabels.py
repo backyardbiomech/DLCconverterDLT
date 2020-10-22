@@ -36,23 +36,26 @@ warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
     # make paths into Paths
     config=Path(config)
+    xyfname=Path(xyfname)
+    vid=Path(vid)
+    camname=vid.stem
+
+    #cnum is entered as 1-indexed so correct for 0-indexed
+    cnum -= 1
+
     #load dlc config
     cfg = read_config(config)
+    labdir = Path(cfg['project_path']) / 'labeled-data' / camname
     scorer = cfg['scorer']
-    ma = True if cfg['multianimalproject'] == 'true' else False
+    ma = cfg['multianimalproject']
     if ma:
         individuals = cfg['individuals']
         bodyparts = cfg['multianimalbodyparts']
     else:
         bodyparts=cfg['bodyparts']
     coords = ['x', 'y']
-    xyfname=Path(xyfname)
 
-    vid=Path(vid)
-    camname=vid.stem
-    labdir = Path(cfg['project_path']) / 'labeled-data' / camname
-
-    # load xypts file to dataframe
+ # load xypts file to dataframe
     xypts = pd.read_csv(xyfname)
     xypts = xypts.astype('float64')
     # just get the columns for this camera
@@ -124,7 +127,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
         xypts.loc[:, ycols] = height - xypts.loc[:, ycols]
 
 
-
+    print(bodyparts)
     # make if option flag is thrown, it checks if any bodypart x/y is empty
     if addbp:
         newbp=[]
@@ -194,11 +197,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    xyfname = args.xy
-    labdir = args.labdir
-    #vname = Path(args.vid)
-    cnum = int(args.cnum) - 1
-    numcams = int(args.numcams)
+    cnum = int(args.cnum)
 
-    dlt2dlclabels(config, xyfname, vid, cnum, int(args.offset), flipy=args.flipy, addbp=args.addbp)
+    dlt2dlclabels(args.config, args.xy, args.vid, cnum, int(args.offset), flipy=args.flipy, addbp=args.addbp)
 

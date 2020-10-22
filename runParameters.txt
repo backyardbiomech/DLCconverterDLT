@@ -1,0 +1,1 @@
+-config /Users/jacksonbe3/Box/research/DLC/dlttest-dlt-2020-10-17/config.yaml -xy /Users/jacksonbe3/Box/research/studentProjects/birdTails/catherineSwinsky/data/20190603/wand02/trial13/trial13-xypts.csv -vid /Users/jacksonbe3/Box/research/studentProjects/birdTails/catherineSwinsky/data/20190603/wand02/trial13/cam2_03-Jun-19_15-08-48.mov -cnum 2 -flipy True -offset 0 -addbp True

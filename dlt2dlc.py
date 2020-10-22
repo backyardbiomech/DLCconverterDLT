@@ -24,7 +24,7 @@ import re
 import warnings
 warnings.filterwarnings('ignore',category=pd.io.pytables.PerformanceWarning)
 
-def main(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, origvidpath, saveImgs):
+def dlt2dlc(fname, vname, cnum, numcams, scorer, opath, flipy, offset, croppath, origvidpath, saveImgs):
     
     # load video
     cap = cv2.VideoCapture(str(vname))
@@ -190,4 +190,4 @@ if __name__== '__main__':
     if not opath.exists():
         opath.mkdir(parents=True, exist_ok=True)
     
-    main(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset, croppath, origvidpath,args.saveImgs)
+    dlt2dlc(fname, vname, cnum, numcams, args.scorer, opath, args.flipy, args.offset, croppath, origvidpath,args.saveImgs)
