@@ -30,6 +30,7 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
+# TODO: if extracting extra frames, need to add those frames to CollectedData
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
 # TODO: add check if DLC extracted frame is not in xypts (after digitizing? or offset caused index error seen with last frame?)
 
@@ -92,7 +93,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
                                                 names=['scorer', 'bodyparts', 'coords'])
         #copy just the rows of interest from DLT to a new df
         #get frame numbers from imgs, from full path, after img, before .png
-        idx = [int(re.findall(r'\d+', s)[0]) for s in [x.stem for x in imgs]]
+        #idx = [int(re.findall(r'\d+', s)[0]) for s in [x.stem for x in imgs]]
         df = pd.DataFrame(np.nan, columns=header, index=index)
 
 
@@ -100,6 +101,14 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         # the file has already been created
         #load the file
         df = pd.read_hdf(colldata[0], 'df_with_missing')
+
+        # build an index based on images in folder
+        newindex = ['labeled-data/{}/{}'.format(camname, im.name) for im in imgs]
+        # compare to index in Collected data, add non-existent entries
+        newindex = list(set(newindex) - set(df.index))
+        #create a temp df
+        newimdf = pd.DataFrame(np.nan, index=newindex, columns=df.columns)
+        df = df.append(newimdf)
         df.sort_index(inplace=True)
 
     if offset < 0:
@@ -169,7 +178,15 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
                         xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
 
 
-
+    # clean out rows and images with no annotation data
+    blanks = df.index[df.isnull().all(1)]
+    df = df.drop(blanks)
+    blankimgs = [labdir / Path(x.split('/')[-1]) for x in list(blanks)]
+    for bl in blankimgs:
+        try:
+            bl.unlink()
+        except FileNotFoundError:
+            continue
     # replace DLT nans with empty entries for DLC formatting
     df.astype('float64')
     df.sort_index(inplace=True)
