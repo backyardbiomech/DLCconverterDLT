@@ -31,18 +31,14 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
-# TODO: add flag to assign to specific individual (assuming separate xypts.csv files for each individual by passing individual name from config
 # TODO: add check if DLC extracted frame is not in xypts (after digitizing? or offset caused index error seen with last frame?)
 
-def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
+def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=False):
     # make paths into Paths
     config=Path(config)
     xyfname=Path(xyfname)
     vid=Path(vid)
     camname=vid.stem
-
-    #cnum is entered as 1-indexed so correct for 0-indexed
-    #cnum -= 1
 
     #load dlc config
     cfg = read_config(config)
@@ -51,6 +47,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
     ma = cfg['multianimalproject']
     if ma:
         individuals = cfg['individuals']
+        indiv = individuals[ind]
         bodyparts = cfg['multianimalbodyparts']
     else:
         bodyparts=cfg['bodyparts']
@@ -136,7 +133,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
         for bp in bodyparts:
             #isolate the bodypart
             if ma:
-                _ = df.loc[:, (scorer, individuals[0], bp)]
+                _ = df.loc[:, (scorer, indiv, bp)]
             else:
                 _ = df.loc[:, (scorer, bp)]
             #find empty rows
@@ -151,7 +148,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
             xyrow = int(re.findall(r'img(\d+)\.png', new[0])[0])
             bp = new[1]
             if ma:
-                df.loc[new[0], (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[
+                df.loc[new[0], (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
                     xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
             else:
                 df.loc[new[0], (scorer, bp, ['x', 'y'])] = xypts.loc[
@@ -165,7 +162,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, addbp=False):
             for bp in bodyparts:
                 xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
                 if ma:
-                    df.loc[new, (scorer, individuals[0], bp, ['x', 'y'])] = xypts.loc[
+                    df.loc[new, (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
                         xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
                 else:
                     df.loc[new, (scorer, bp, ['x', 'y'])] = xypts.loc[
@@ -189,16 +186,15 @@ if __name__ == '__main__':
     parser.add_argument('-xy',
                         help='input path to xypts file')
     parser.add_argument('-vid', help='input path to video file')
-    parser.add_argument('-cnum', default=1, help='enter 1-indexed camera number for extraction')
+    parser.add_argument('-cnum', default=1, type=int, help='enter 1-indexed camera number for extraction')
     parser.add_argument('-flipy', default=True,
                         help='flip y coordinates - necessary for DLTdv versions 1-7 and Argus, set to False for DLTdv8')
     parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
+    parser.add_argument('-ind', default=0, type=int, help='enter 0-indexed individual number from config file. \n xypts.csv must have only one indiv digitized.')
     parser.add_argument('-addbp', default=False, help='if new tracks/bodyparts were digitized in Argus/DLTdv, add this flag to add those to labeled data')
 
 
     args = parser.parse_args()
 
-    cnum = int(args.cnum)
-
-    dlt2dlclabels(args.config, args.xy, args.vid, cnum, int(args.offset), flipy=args.flipy, addbp=args.addbp)
+    dlt2dlclabels(args.config, args.xy, args.vid, args.cnum, int(args.offset), flipy=args.flipy, ind=args.ind, addbp=args.addbp)
 
