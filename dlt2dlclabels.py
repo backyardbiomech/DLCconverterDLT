@@ -24,15 +24,14 @@ import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import os
 import re
 import warnings
 from deeplabcut.utils.auxiliaryfunctions import read_config
 
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
-# TODO: if extracting extra frames, need to add those frames to CollectedData
-# TODO: set up to call deeplabcut functions for "add video" and "extract frames", including mannually passing a set of frame numbers
-# TODO: add check if DLC extracted frame is not in xypts (after digitizing? or offset caused index error seen with last frame?)
+# TODO: set up to call deeplabcut functions for "add video" and "extract frames", including manually passing a set of frame numbers
 
 def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=False):
     # make paths into Paths
@@ -76,8 +75,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
     # if the labeled data file has NOT already been created with DLC label frames function
     if len(colldata) == 0:
         # no file exists, check to see if images extracted, and make the file based on config
-
-        index = ['labeled-data/{}/{}'.format(camname,im.name) for im in imgs]
+        index = ['labeled-data{}{}{}{}'.format(os.sep, camname, os.sep, im.name) for im in imgs]
         # build the empty df
         # get tracknames from cfg
         if ma:
@@ -103,13 +101,15 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         df = pd.read_hdf(colldata[0], 'df_with_missing')
 
         # build an index based on images in folder
-        newindex = ['labeled-data/{}/{}'.format(camname, im.name) for im in imgs]
+        newindex = ['labeled-data{}{}{}{}'.format(os.sep, camname, os.sep, im.name) for im in imgs]
         # compare to index in Collected data, add non-existent entries
         newindex = list(set(newindex) - set(df.index))
         #create a temp df
         newimdf = pd.DataFrame(np.nan, index=newindex, columns=df.columns)
+        # combine and sort
         df = df.append(newimdf)
         df.sort_index(inplace=True)
+        addbp = True
 
     if offset < 0:
         # the DLT digitized value on the n-th row was actually digitized at n+offset frame
@@ -135,7 +135,8 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
 
 
     print(bodyparts)
-    # make if option flag is thrown, it checks if any bodypart x/y is empty
+    # make if option flag is thrown, it checks if any bodypart x/y is empty, might be a touch slower for large data frames,
+    #but allows more control over overwriting existing labels
     if addbp:
         newbp=[]
         indx=[]
@@ -156,13 +157,16 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         for new in news:
             xyrow = int(re.findall(r'img(\d+)\.png', new[0])[0])
             bp = new[1]
-            if ma:
-                df.loc[new[0], (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
-                    xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
-            else:
-                df.loc[new[0], (scorer, bp, ['x', 'y'])] = xypts.loc[
-                    xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
-
+            try:
+                if ma:
+                    df.loc[new[0], (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
+                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                else:
+                    df.loc[new[0], (scorer, bp, ['x', 'y'])] = xypts.loc[
+                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+            except:
+                #image or xypts row not found due to offsets deletions
+                continue
     else:
         # go through df find indexes without any entries, extract those entries from xydata, and add
         news = df.index[df.isnull().all(1)]
@@ -170,18 +174,21 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         for new in news:
             for bp in bodyparts:
                 xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
-                if ma:
-                    df.loc[new, (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
-                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
-                else:
-                    df.loc[new, (scorer, bp, ['x', 'y'])] = xypts.loc[
-                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
-
+                try:
+                    if ma:
+                        df.loc[new, (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
+                            xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                    else:
+                        df.loc[new, (scorer, bp, ['x', 'y'])] = xypts.loc[
+                            xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                except:
+                    # image or xypts row not found due to offsets deletions
+                    continue
 
     # clean out rows and images with no annotation data
     blanks = df.index[df.isnull().all(1)]
     df = df.drop(blanks)
-    blankimgs = [labdir / Path(x.split('/')[-1]) for x in list(blanks)]
+    blankimgs = [labdir / Path(x.split(os.sep)[-1]) for x in list(blanks)]
     for bl in blankimgs:
         try:
             bl.unlink()
