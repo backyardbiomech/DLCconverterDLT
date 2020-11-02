@@ -61,12 +61,12 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
     thiscam = [x for x in xypts.columns if camstr in x]
     xypts = xypts[thiscam]
     newcols = {}
-    #store track name and column index - start of tracks - in dict
+    # store track name and column index - start of tracks - in dict
     for i in range(0, len(xypts.columns), 2):
         newcol = xypts.columns[i].split('_')[0]
         newcols[newcol]=i
 
-    #find ./CollectedData_scorerintitials.h5 in labdir
+    # find ./CollectedData_scorerintitials.h5 in labdir
     colldata = list(labdir.glob('**/CollectedData_*.h5'))
 
     # find extracted images
@@ -112,7 +112,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         addbp = True
 
     if offset < 0:
-        # the DLT digitized value on the n-th row was actually digitized at n+offset frame
+        # the DLT digitized value on the n-th row of the csv was actually digitized at n+offset frame of video file
         # e.g. if offset = -5, a point digitized in the first frame of the video will be placed
         # on the 5th row of the xypts csv file, so negative offsets mean that many blank rows
         # need to be removed from the front of the df
@@ -121,8 +121,12 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         xypts.reset_index(drop=True, inplace=True)
 
     if offset > 0:
+        # need to insert blank rows at the start
+        _ = pd.DataFrame(np.nan, index=range(offset), columns=xypts.columns)
+        xypts = pd.concat([_, xypts], ignore_index=True)
         # remove that many rows from the end of the df
         xypts.drop(range(len(xypts) - offset, len(xypts)), inplace=True)
+        # and then reindex
 
 
     if flipy is True:
