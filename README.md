@@ -4,46 +4,41 @@ A small set of utilities that allow conversion between the data storage formats 
 
 While DLC has 3D capabilities (using checkerboards), many field-based setups necessitate the ability to use a wand calibration (easywand or Argus). DLC can be used to auto-track the wand and/or subjects in each video (treated as separate 2D videos), then moved back to DLT for 3d reconstruction. 
 
-Multi-camera setups that are not frame-synced (e.g. GoPros) must have offsets calculated (Argus), and adjusted for. These scripts use those offset values.
+Multi-camera setups that are not frame-synced (e.g. GoPros) must have offsets calculated (Argus Sync), and adjusted for. These scripts use those offset values.
 
-As a bonus (i.e. because I needed it), I'm also including bbCrop.py to allow digitizing (labeling) of a bounding box (upperleft - 'ul', and bottom right - 'br') to produce videos dynamically cropped to that bounding box. These images could then be trained and analyzed in DLC. Those output coordinates can then be put back into the full video resolution with cropped2full.py for full 2d coordinates, or processed with dlc2dlt.py to be brought back into a DLT system for 3D coordinates.
+**NOTE**: These have been tested on *minimal* sample data and in a single complete workflow. Be especially careful to make sure your data lines up on the appropriate frame of video, and that frame offsets are working correctly. Please feel free to test, edit, contribute, suggest.
 
-**NOTE**: As of 6 February, 2020, these "work" in so far as they produce files that look like they have the correct format without spitting out errors, and they have been *minimally* tested on sample data. They have *not* been tested in a complete workflow to make sure that everything matches up where it should. Be especially careful to make sure your data lines up on the appropriate frame of video, and that frame offsets are working correctly. Please feel free to test, edit, contribute, suggest. Consider these a first draft!
-
-**NOTE**: As of 21 October, 2020, I am working on converting these to work with multianimal DLC, and cleaning up a few bugs. 
-
-Once they are well tested, I will include these functions directly in Argus, and I'm sure a similar set of MATLAB scripts will find their way into DLTdv8.
+Once they are well tested, I may include these functions directly in Argus, and welcome others to modify these to generate a similar set of MATLAB scripts for  DLTdv8.
 
 ## Getting Started
 
 Download the scripts. Put them somewhere handy. Call them on the command-line.  See below.
 
 ## Usage ouline:
-1. The videos used for training DeepLabCut must have unique names. If, like me, your DLT videos are all named cam1.mp4, cam2.mp4, etc, `renameVids.py` will help give unique names.
+1. The videos used **for training** DeepLabCut must have unique names. If, like me, your DLT videos are all named `cam1.mp4`, `cam2.mp4`, etc, `renameVids.py` will help give unique names.
 2. If you have data digitized in a DLT program that you want to use as labelled data in DLC:
-    1. use `dlt2dlc.py` if you want to extract frames and labels from your videos. This gets complicated and might be buggy
-    2. Use DLC to add videos to project and extract frames, and use `dlt2dlclabels.py` (simpler, more stable) to skip the DLC labeling GUI. This requires DLC version 2.2b8 or higher, and videos with only a single animal visible and labeled (as of 20 Oct. 2020), and DLT track names must exactly match bodyparts in DLC config.
+    1. Use DLC to add videos to your project and extract frames
+    2. Use `dlt2dlclabels.py` to skip the DLC labeling GUI. This requires DLC version 2.2b8 or higher.
+    3. If you have multiple animals visible and are using multianimal DLC, then label each animal in separate DLT data files.
+    4. DLT track names must exactly match bodyparts in DLC `config.yaml`.
 3. Train DLC, and analyze your videos.
-    1. If you are analyzing bounding boxes (EDIT: probably don't do this...), get those coordinates from DLC for a video and run `bbCrop.py` to make a cropped video.
-    2. You can then use `dlt2cropped.py` to "crop" any coordinates you digitized in DLT, then pass to DLC for training. 
-    3. Analyze your cropped videos in DLC
-    4. Use `cropped2full.py` to "uncrop" the DLC generated coordinates back to full resolution coordinates
-4. Use `dlc2dlt.py` to convert DLC coordinates back to DLT style coordinates (this is *might* be working with multianimal projects)
-5. In your DLT program (Argus or DLTdv), either load the videos and new data, or use command line functions in each to perform the 3d reconstruction with your dlt coefficients.  
+4. Use `dlc2dlt.py` to convert DLC coordinates back to DLT style coordinates (this is *might* be working with multianimal projects...not well tested as of 12 Nov. 2020)
+5. In your DLT program (Argus or DLTdv), either load the videos and new data, or use command line functions in each to perform the 3D reconstruction with your dlt coefficients.  
+
 ## Detailed Usage
 
-For both functions, the flag `-flipy` will default to `True` which is necessary if your data are from Argus, or DLTdv versions prior to 8.0. In those packages, the coordinate origin is in the lower left of the video, but the computer vision standard (used by DeepLabCut and by DLTdv8) is for the origin to be in the **upper** left. If you are using DLTdv8, just add `-flipy False` to the call.
+In all relevant functions, the flag `-flipy` defaults to `True` which is necessary if your data are from Argus, or DLTdv versions prior to 8.0. In those packages, the coordinate origin is in the lower left of the video, but the computer vision standard (used by DeepLabCut and by DLTdv8) is for the origin to be in the **upper** left. If you are using DLTdv8, just add `-flipy False` to the call.
 
-### dlt2dlc
+### dlt2dlclabels
 
 Many of us have lots of data already digitized in a DLT-calibrated environment. Those already digitized points can be used in place of "labeling" video in DeepLabCut. That's what dlt2dlc.py and dlt2dlclabels.py are for. It "essentially" replaces/parallels the labelling function in DLC.
 
 ```python
-python dlt2dlc.py --help
+python dlt2dlclabels.py --help
 usage: dlt2dlclabels.py [-h] [-config CONFIG] [-xy XY] [-vid VID] [-cnum CNUM]
-                        [-flipy FLIPY] [-offset OFFSET] [-addbp ADDBP]
+                        [-flipy FLIPY] [-offset OFFSET] [-ind IND] [-addbp ADDBP]
 
-convert argus to DLC labeled frames for training
+convert Argus or DLTdv to DLC labeled frames for training
 
 optional arguments:
   -h, --help      show this help message and exit
@@ -52,51 +47,23 @@ optional arguments:
   -vid VID        input path to video file
   -cnum CNUM      enter 1-indexed camera number for extraction
   -flipy FLIPY    flip y coordinates - necessary for DLTdv versions 1-7 and
-                  Argus, set to False for DLTdv8
+                  Argus, set to False for DLTdv8, default = True
   -offset OFFSET  enter offset of chosen camera as integer
+  -ind IND        enter 0-indexed individual number from config file.
+                  xypts.csv must have only one indiv digitized
   -addbp          if new tracks/bodyparts were digitized in Argus/DLTdv, add
-                  this flag to add those to labeled data
+                  this flag to add those to already labeled data in DLC.
+                  Not including this flag means the DLT data will overwrite any existing DLC labels for that video.
 
 ```
 For example, 
 
 ```python
-python dlt2dlclables.py -config /path/to/deeplabcut/project/config.yaml -xy /path/to/xypts/file-xypts.csv -vid /path/to/xypts/video.mp4 -cnum 2 -flipy False -offset -21
+python dlt2dlclables.py -config /path/to/deeplabcut/project/config.yaml -xy /path/to/xypts/file-xypts.csv -vid /path/to/xypts/cam2.mp4 -cnum 2 -flipy False -offset -21 -ind 1 -addbp
 ```
 
-This one below might be buggy, use at your own risk
+will take the data and video from the second camera (with a -21 frame offset) in a three camera setup, with individual 2 digitized, and save those data in the `CollectedData` file of the relevant camera in the DLC project. With the `-addbp` flag, it will not overwrite existing data in that file. 
 
-```python
-python dlt2dlc.py --help
-usage: dlt2dlc.py [-h] [-xy XY] [-vid VID] [-cnum CNUM] [-numcams NUMCAMS]
-                  [-scorer SCORER] [-newpath NEWPATH] [-flipy FLIPY]
-                  [-offset OFFSET]
-
-convert argus to DLC labeled frames for training
-
-optional arguments:
-  -h, --help        show this help message and exit
-  -xy XY            input path to xyzpts file
-  -vid VID          input path to video file
-  -cnum CNUM        enter 1-indexed camera number for extraction
-  -numcams NUMCAMS  enter number of cameras
-  -scorer SCORER    enter scorer name to match DLC project (default = DLT)
-  -newpath NEWPATH  enter a path for saving, existing target folder will be
-                    overwritten, should end with "labeled-data/<videoname>"
-  -flipy FLIPY      flip y coordinates - necessar for Argus and DLTdv versions
-                    1-7, set to False for DLTdv8
-  -offset OFFSET    enter offset of chosen camera as integer
-```
-
-For example, 
-
-```python
-python dlt2dlc.py -xy /path/to/xypts/file-xypts.csv -vid /path/to/xypts/video.mp4 -cnum 2 -numcams 3 -scorer sej -newpath /path/to/a/different/place/labeled-date/thisvideo -offset -21
-```
-
-will take the data and video from the second camera (with a -21 frame offset) in a three camera setup, and save the coordinates and images in `newpath`. Note that it will overwrite newpath if it exists. If `newpath` isn't given, it will make a `labeled-data/vidname/` directory at the same path as the video. You *should* then be able to take the `vidname` directory and move it into your DLC project folder (put it in labeled-data). You *may* then have to update the config.yaml file to get DLC to see these data (not tested). This will save **every* frame with something digitized in it, which can take a while and eat up a lot of space.
-
-TODO: allow cropping, sub-selection of frames
 
 ### dlc2dlt
 
