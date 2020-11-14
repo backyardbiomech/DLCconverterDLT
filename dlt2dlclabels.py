@@ -12,7 +12,7 @@ VERY IMPORTANT: Argus/DLTdv track names must exactly match DLC bodyparts (in con
 
 If you go back to Argus/DLTdv and digitize new frames/points, you have two options
 1. delete the Collected_Data_...h5 file in labeled-data/camerafolder to fully reimport. This is your only option if you "correct" points in Argus/DLT
-2. If you are adding points from DLT, but already made corrections in the label frames GUI in DLC, add -addbp to the command line call
+2. If you are adding frames/points from DLT, but already made corrections in the label frames GUI in DLC, add -addbp to the command line call
 
 
 Author: Brandon E. Jackson, Ph.D.

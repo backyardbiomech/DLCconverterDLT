@@ -19,6 +19,9 @@ import numpy as np
 import cv2
 from pathlib import Path
 import re
+# from deeplabcut.utils.auxiliaryfunctions import read_config
+
+# TODO: read no. of individuals if multi, decide if 1 file per indiv., or multiple tracks in one file
 
 def main(opath, camlist, flipy, offsets, like):
     numcams = len(camlist)
@@ -32,6 +35,7 @@ def main(opath, camlist, flipy, offsets, like):
         #get track names from first camera
         if c== 0:
             tracks = camdata.columns.get_level_values('bodyparts')
+            #TODO: check if multianimal project based on "individual" in multi-index
         # allow different "scorer"s if different DLC models were used on each camera
         scorer = camdata.columns.get_level_values('scorer')[0]
         # re-index if h5 is training style - index is paths to images instead of all frame numbers
