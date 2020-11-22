@@ -19,11 +19,11 @@ import numpy as np
 import cv2
 from pathlib import Path
 import re
-# from deeplabcut.utils.auxiliaryfunctions import read_config
+from deeplabcut.utils.auxiliaryfunctions import read_config
 
 # TODO: read no. of individuals if multi, decide if 1 file per indiv., or multiple tracks in one file
 
-def main(opath, camlist, flipy, offsets, like):
+def main(config, opath, camlist, flipy, offsets, like):
     numcams = len(camlist)
     alldata = {}
     numframes = []
