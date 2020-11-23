@@ -8,6 +8,8 @@ That file can then be loaded into DLTdv* or Argus, along with the camera profile
 
 Argus and DLTdv* also contain 3d_reconstruct commands that can be called on the command line with the xypts file output here.
 
+With multi-animal projects, this will create SEPARATE dlt files for each individual, which can be combined in post-hoc analysis, or when/if I write a functions specifically to that.
+
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
 Last edited: 23 Jan 2020
@@ -24,7 +26,26 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 # TODO: read no. of individuals if multi, decide if 1 file per indiv., or multiple tracks in one file
 
 def main(config, opath, camlist, flipy, offsets, like):
+    config=Path(config)
+    opath = Path(opath)
+    offsets = [int(x) for x in args.offsets]
     numcams = len(camlist)
+
+    # load dlc config
+    cfg = read_config(config)
+    scorer = cfg['scorer']
+    ma = cfg['multianimalproject']
+
+    if ma:
+        individuals = cfg['individuals']
+        # indiv = individuals[ind]
+        bodyparts = cfg['multianimalbodyparts']
+    else:
+        bodyparts=cfg['bodyparts']
+    coords = ['x', 'y']
+    tracks=bodyparts
+    # alldata is a nested dict to contain numpy arrays until writing to csv
+    # first key is cam, second is indiv
     alldata = {}
     numframes = []
     digi = True
@@ -33,28 +54,46 @@ def main(config, opath, camlist, flipy, offsets, like):
         #load the hd5
         camdata = pd.read_hdf(camlist[c], 'df_with_missing')
         #get track names from first camera
-        if c== 0:
-            tracks = camdata.columns.get_level_values('bodyparts')
+        #if c== 0:
+            #tracks = camdata.columns.get_level_values('bodyparts')
             #TODO: check if multianimal project based on "individual" in multi-index
         # allow different "scorer"s if different DLC models were used on each camera
-        scorer = camdata.columns.get_level_values('scorer')[0]
+        #scorer = camdata.columns.get_level_values('scorer')[0]
         # re-index if h5 is training style - index is paths to images instead of all frame numbers
-        if camdata.index.dtype != np.int64:
-            # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
-            new = [Path(x).stem for x in camdata.index]
-            camdata.index = [int(re.findall(r'\d+', s)[0]) for s in new]
-            # add Nans for all missing indexes from 0 to numframes
-            camdata = camdata.reindex(range(0, camdata.index.max() + 1))
-            digi = False
-        else:
+        # if camdata.index.dtype != np.int64:
+        #     # it's DLT created or training data during testing, indexed by a path to a training image, which is numbered
+        #     new = [Path(x).stem for x in camdata.index]
+        #     camdata.index = [int(re.findall(r'\d+', s)[0]) for s in new]
+        #     # add Nans for all missing indexes from 0 to numframes
+        #     camdata = camdata.reindex(range(0, camdata.index.max() + 1))
+        #     digi = False
+        # else:
             # set x,y values with likelihoods below like to nan
             # for each point
+
+        if ma:
+            for ind in individuals:
+                for track in set(tracks):
+                    camdata.loc[camdata[scorer][ind][track]['likelihood'] <= like, (scorer, ind, track, ['x', 'y'])] = np.nan
+                alldata[c][ind]=camdata[scorer][ind]
+        else:
             for track in set(tracks):
                 camdata.loc[camdata[scorer][track]['likelihood'] <= like, (scorer, track, ['x', 'y'])] = np.nan
+            alldata[c] = camdata[scorer]
+
+        # make a list to keep track of the number of frames in each camera's dataset
         numframes.append(max(camdata.index.values) + 1)
-        alldata[c] = camdata
+
     # initialize the massive array full of nans (with more than enough rows)
-    arr = np.empty((max(numframes) - min(offsets), len(tracks)//3 * 2 * numcams)) * np.nan
+    blankarr = np.empty((max(numframes) - min(offsets), len(tracks)//3 * 2 * numcams)) * np.nan
+    # outdata is a dict with first key = indiv (0 if not multianimal)
+    outdata={}
+    if ma:
+        for ind in individuals:
+            outdata[ind]=blankarr.copy
+    else:
+        outdata[0] = blankarr.copy
+
     # loop through each camera's data and assign to the proper row
     for c, camdata in alldata.items():
         if flipy:
@@ -65,50 +104,95 @@ def main(config, opath, camlist, flipy, offsets, like):
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
         # make lists of rows, of matching length, that account for offsets (out = in - offset)
-        outrows = list(range(max([0, 0-offsets[c]]), min([numframes[c], numframes[c]-offsets[c]]), 1))
-        inrows = list(range(max([0, 0+offsets[c]]), min([numframes[c], numframes[c]+offsets[c]]), 1))
-
-        if digi is False:
-            iter = 2
+        outrows = list(range(max([0, 0 - offsets[c]]), min([numframes[c], numframes[c] - offsets[c]]), 1))
+        inrows = list(range(max([0, 0 + offsets[c]]), min([numframes[c], numframes[c] + offsets[c]]), 1))
+        iter = 3
+        if ma:
+            for ind in individuals:
+                for i in range(len(tracks)):
+                    incol = i * iter
+                    outcol = (i * 2 * numcams) + (2 * c)
+                    if flipy:
+                        outdata[ind][outrows, outcol] = camdata[ind].iloc[inrows, incol]
+                        outdata[ind][outrows, outcol+1] = height - camdata[ind].iloc[inrows,incol+1]
+                    else:
+                        outdata[ind][outrows,outcol:outcol+2] = camdata[ind].iloc[inrows, incol:incol+2]
         else:
-            iter = 3
-        # fill the array
-        for i in range(len(tracks)//iter):
-            incol = i*iter
-            outcol = (i * 2 * numcams) + (2 * c)
-            if flipy:
-                arr[outrows, outcol] = camdata.iloc[inrows, incol]
-                arr[outrows, outcol+1] = height - camdata.iloc[inrows, incol+1]
-            else:
-                arr[outrows, outcol:outcol+2] = camdata.iloc[inrows, incol:incol+2]
+            for i in range(len(tracks)):
+                incol = i * iter
+                outcol = (i * 2 * numcams) + (2 * c)
+                if flipy:
+                    outdata[0][outrows, outcol] = camdata.iloc[inrows, incol]
+                    outdata[0][outrows, outcol+1] = height - camdata.iloc[inrows, incol+1]
+                else:
+                    outdata[0][outrows, outcol:outcol+2] = camdata.iloc[inrows, incol:incol+2]
 
-            
-    tracknames = tracks[0:-1:3]
-    # make col names
+    #TODO: set up for multi animal
+    #tracknames = tracks[0:-1:3]
+    # make col names (same for all files)
     xycols = ['{}_cam_{}_{}'.format(x, c, d) for x in tracknames for c in range(1,numcams+1) for d in ['x', 'y']]
-    # convert to dataframe
-    xydf = pd.DataFrame(arr, columns = xycols, index = range(len(arr)))
-    # write to CSV
-    xydf.to_csv((str(opath) + '-xypts.csv'), na_rep = 'NaN', index=False)
-    
-    # make "dummy" xyzpts
-    xyzcols = ['{}_{}'.format(x, d) for x in tracknames for d in ['x', 'y', 'z']]
-    xyzdf = pd.DataFrame(np.nan, columns = xyzcols, index = range(len(arr)))
-    xyzdf.to_csv((str(opath) + '-xyzpts.csv'), na_rep = 'NaN', index=False)
-    # dummy resid
-    residdf = pd.DataFrame(np.nan, columns = tracknames, index=range(len(arr)))
-    residdf.to_csv((str(opath) + '-xyzres.csv'), na_rep = 'NaN', index=False)
-    # dummy offsets
-    offcols = ['camera_{}'.format(cnum) for cnum in range(1, numcams+1)]
-    offdf = pd.DataFrame(0, columns = offcols, index=range(len(arr)))
-    offdf.iloc[0]=offsets
-    offdf.to_csv((str(opath) + '-offsets.csv'), na_rep = 'NaN', index=False)
+    if ma:
+        # make separate files for each indiv
+        for i, ind in enumerate(individuals)
+            basename = str(opath) + '_' + str(ind) + '-'
+            xydf = pd.DataFrame(outdata[ind], columns=xycols, index=range(len(outdata[ind])))
+            # write to CSV
+            xydf.to_csv((basename + 'xypts.csv'), na_rep="NaN", index=False)
+            #make "dummy" files
+            xyzcols = ['{}_{}'.format(x, d) for x in tracknames for d in ['x', 'y', 'z']]
+            xyzdf = pd.DataFrame(np.nan, columns=xyzcols, index=range(len(outdata[ind])))
+            xyzdf.to_csv((basename + 'xyzpts.csv'), na_rep='NaN', index=False)
 
+            residdf = pd.DataFrame(np.nan, columns=tracknames, index=range(len(outdata[ind])))
+            residdf.to_csv((basename + 'xyzres.csv'), na_rep='NaN', index=False)
+
+            offcols = ['camera_{}'.format(cnum) for cnum in range(1, numcams + 1)]
+            offdf = pd.DataFrame(0, columns=offcols, index=range(len(outdata[ind])))
+            offdf.iloc[0] = offsets
+            offdf.to_csv((basename + 'offsets.csv'), na_rep='NaN', index=False)
+
+    else:
+        ind=0
+        basename = str(opath) + '-'
+        xydf = pd.DataFrame(outdata[ind], columns=xycols, index=range(len(outdata[ind])))
+        # write to CSV
+        xydf.to_csv((basename + 'xypts.csv'), na_rep="NaN", index=False)
+        # make "dummy" files
+        xyzcols = ['{}_{}'.format(x, d) for x in tracknames for d in ['x', 'y', 'z']]
+        xyzdf = pd.DataFrame(np.nan, columns=xyzcols, index=range(len(outdata[ind])))
+        xyzdf.to_csv((basename + 'xyzpts.csv'), na_rep='NaN', index=False)
+
+        residdf = pd.DataFrame(np.nan, columns=tracknames, index=range(len(outdata[ind])))
+        residdf.to_csv((basename + 'xyzres.csv'), na_rep='NaN', index=False)
+
+        offcols = ['camera_{}'.format(cnum) for cnum in range(1, numcams + 1)]
+        offdf = pd.DataFrame(0, columns=offcols, index=range(len(outdata[ind])))
+        offdf.iloc[0] = offsets
+        offdf.to_csv((basename + 'offsets.csv'), na_rep='NaN', index=False)
+
+    # # convert to dataframe
+    # xydf = pd.DataFrame(arr, columns = xycols, index = range(len(arr)))
+    # # write to CSV
+    # xydf.to_csv((str(opath) + '-xypts.csv'), na_rep = 'NaN', index=False)
+    #
+    # # make "dummy" xyzpts
+    # xyzcols = ['{}_{}'.format(x, d) for x in tracknames for d in ['x', 'y', 'z']]
+    # xyzdf = pd.DataFrame(np.nan, columns = xyzcols, index = range(len(arr)))
+    # xyzdf.to_csv((str(opath) + '-xyzpts.csv'), na_rep = 'NaN', index=False)
+    # # dummy resid
+    # residdf = pd.DataFrame(np.nan, columns = tracknames, index=range(len(arr)))
+    # residdf.to_csv((str(opath) + '-xyzres.csv'), na_rep = 'NaN', index=False)
+    # # dummy offsets
+    # offcols = ['camera_{}'.format(cnum) for cnum in range(1, numcams+1)]
+    # offdf = pd.DataFrame(0, columns = offcols, index=range(len(arr)))
+    # offdf.iloc[0]=offsets
+    # offdf.to_csv((str(opath) + '-offsets.csv'), na_rep = 'NaN', index=False)
+    #
 
 if __name__== '__main__':
     parser = argparse.ArgumentParser(
     description='convert argus to DLC labeled frames for training')
-
+    parser.add_argument('-config', help='input path to DLC config file')
     parser.add_argument('-dlctracks', nargs='+', help='input paths of DLC tracked coordinates (hd5) in order used in DLT calibration, each path separated by a space')
     parser.add_argument('-newpath', type=str, help = 'enter a path for saving, will overwrite if it already exists, should not be in DLC project folder, should end with filename prefix')
     parser.add_argument('-flipy', default=True, help = 'flip y coordinates - necessar for Argus and DLTdv versions 1-7, set to False for DLTdv8')
@@ -116,12 +200,6 @@ if __name__== '__main__':
     parser.add_argument('-like', default=0.9, help='enter the likelihood threshold - defaults to 0.9')
 
     args = parser.parse_args()
-    if not args.offsets:
-        offsets = [0] * len(args.dlctracks)
-    else:
-        offsets = [int(x) for x in args.offsets]
-        
-    opath = Path(args.newpath)
-    # opath.mkdir(parents=True, exist_ok=True)
+
     
-    main(opath, args.dlctracks, args.flipy, offsets, float(args.like))
+    main(args.config, args.newpath, args.dlctracks, args.flipy, int(args.offsets), float(args.like))
