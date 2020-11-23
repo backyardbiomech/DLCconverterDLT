@@ -28,12 +28,12 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 def main(config, opath, camlist, flipy, offsets, like):
     config=Path(config)
     opath = Path(opath)
-    offsets = [int(x) for x in args.offsets]
+    offsets = [int(x) for x in offsets]
     numcams = len(camlist)
 
     # load dlc config
     cfg = read_config(config)
-    scorer = cfg['scorer']
+    #scorer = cfg['scorer']
     ma = cfg['multianimalproject']
 
     if ma:
@@ -53,6 +53,7 @@ def main(config, opath, camlist, flipy, offsets, like):
     for c in range(numcams):
         #load the hd5
         camdata = pd.read_hdf(camlist[c], 'df_with_missing')
+        scorer=camdata.columns.get_level_values('scorer')[0]
         #get track names from first camera
         #if c== 0:
             #tracks = camdata.columns.get_level_values('bodyparts')
@@ -72,6 +73,7 @@ def main(config, opath, camlist, flipy, offsets, like):
             # for each point
 
         if ma:
+            alldata[c]={}
             for ind in individuals:
                 for track in set(tracks):
                     camdata.loc[camdata[scorer][ind][track]['likelihood'] <= like, (scorer, ind, track, ['x', 'y'])] = np.nan
@@ -85,21 +87,21 @@ def main(config, opath, camlist, flipy, offsets, like):
         numframes.append(max(camdata.index.values) + 1)
 
     # initialize the massive array full of nans (with more than enough rows)
-    blankarr = np.empty((max(numframes) - min(offsets), len(tracks)//3 * 2 * numcams)) * np.nan
+    blankarr = np.empty((max(numframes) - min(offsets), len(tracks) * 2 * numcams)) * np.nan
     # outdata is a dict with first key = indiv (0 if not multianimal)
     outdata={}
     if ma:
         for ind in individuals:
-            outdata[ind]=blankarr.copy
+            outdata[ind]=blankarr.copy()
     else:
-        outdata[0] = blankarr.copy
+        outdata[0] = blankarr.copy()
 
     # loop through each camera's data and assign to the proper row
     for c, camdata in alldata.items():
         if flipy:
             # load each video, check for "height", and flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
             # DLC video name is datafile stem, plus _labeled.mp4
-            vidname = camlist[c].rsplit('.h')[0] + '_labeled.mp4'
+            vidname = camlist[c].rsplit(scorer)[0] + '.mov'
             cap = cv2.VideoCapture(str(vidname))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
@@ -130,20 +132,20 @@ def main(config, opath, camlist, flipy, offsets, like):
     #TODO: set up for multi animal
     #tracknames = tracks[0:-1:3]
     # make col names (same for all files)
-    xycols = ['{}_cam_{}_{}'.format(x, c, d) for x in tracknames for c in range(1,numcams+1) for d in ['x', 'y']]
+    xycols = ['{}_cam_{}_{}'.format(x, c, d) for x in tracks for c in range(1,numcams+1) for d in ['x', 'y']]
     if ma:
         # make separate files for each indiv
-        for i, ind in enumerate(individuals)
+        for i, ind in enumerate(individuals):
             basename = str(opath) + '_' + str(ind) + '-'
             xydf = pd.DataFrame(outdata[ind], columns=xycols, index=range(len(outdata[ind])))
             # write to CSV
             xydf.to_csv((basename + 'xypts.csv'), na_rep="NaN", index=False)
             #make "dummy" files
-            xyzcols = ['{}_{}'.format(x, d) for x in tracknames for d in ['x', 'y', 'z']]
+            xyzcols = ['{}_{}'.format(x, d) for x in tracks for d in ['x', 'y', 'z']]
             xyzdf = pd.DataFrame(np.nan, columns=xyzcols, index=range(len(outdata[ind])))
             xyzdf.to_csv((basename + 'xyzpts.csv'), na_rep='NaN', index=False)
 
-            residdf = pd.DataFrame(np.nan, columns=tracknames, index=range(len(outdata[ind])))
+            residdf = pd.DataFrame(np.nan, columns=tracks, index=range(len(outdata[ind])))
             residdf.to_csv((basename + 'xyzres.csv'), na_rep='NaN', index=False)
 
             offcols = ['camera_{}'.format(cnum) for cnum in range(1, numcams + 1)]
@@ -158,11 +160,11 @@ def main(config, opath, camlist, flipy, offsets, like):
         # write to CSV
         xydf.to_csv((basename + 'xypts.csv'), na_rep="NaN", index=False)
         # make "dummy" files
-        xyzcols = ['{}_{}'.format(x, d) for x in tracknames for d in ['x', 'y', 'z']]
+        xyzcols = ['{}_{}'.format(x, d) for x in tracks for d in ['x', 'y', 'z']]
         xyzdf = pd.DataFrame(np.nan, columns=xyzcols, index=range(len(outdata[ind])))
         xyzdf.to_csv((basename + 'xyzpts.csv'), na_rep='NaN', index=False)
 
-        residdf = pd.DataFrame(np.nan, columns=tracknames, index=range(len(outdata[ind])))
+        residdf = pd.DataFrame(np.nan, columns=tracks, index=range(len(outdata[ind])))
         residdf.to_csv((basename + 'xyzres.csv'), na_rep='NaN', index=False)
 
         offcols = ['camera_{}'.format(cnum) for cnum in range(1, numcams + 1)]
@@ -202,4 +204,4 @@ if __name__== '__main__':
     args = parser.parse_args()
 
     
-    main(args.config, args.newpath, args.dlctracks, args.flipy, int(args.offsets), float(args.like))
+    main(args.config, args.newpath, args.dlctracks, args.flipy, args.offsets, float(args.like))
