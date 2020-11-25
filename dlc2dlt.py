@@ -25,7 +25,7 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 
 # TODO: read no. of individuals if multi, decide if 1 file per indiv., or multiple tracks in one file
 
-def main(config, opath, camlist, flipy, offsets, like):
+def dlc2dlt(config, opath, camlist, flipy, offsets, like):
     config=Path(config)
     opath = Path(opath)
     offsets = [int(x) for x in offsets]
@@ -88,6 +88,8 @@ def main(config, opath, camlist, flipy, offsets, like):
 
     # initialize the massive array full of nans (with more than enough rows)
     blankarr = np.empty((max(numframes) - min(offsets), len(tracks) * 2 * numcams)) * np.nan
+    xcols = range(0, len(tracks) * 2 * numcams, 2)
+    ycols = range(1, len(tracks) * 2 * numcams, 2)
     # outdata is a dict with first key = indiv (0 if not multianimal)
     outdata={}
     if ma:
@@ -98,12 +100,13 @@ def main(config, opath, camlist, flipy, offsets, like):
 
     # loop through each camera's data and assign to the proper row
     for c, camdata in alldata.items():
-        if flipy:
-            # load each video, check for "height", and flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
-            # DLC video name is datafile stem, plus _labeled.mp4
-            vidname = camlist[c].rsplit(scorer)[0] + '.mov'
-            cap = cv2.VideoCapture(str(vidname))
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # load each video, check for "height", and flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
+        # DLC video name is datafile stem, plus _labeled.mp4
+        vidname = camlist[c].rsplit(scorer)[0] + '.mov'
+        cap = cv2.VideoCapture(str(vidname))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
         # make lists of rows, of matching length, that account for offsets (out = in - offset)
         outrows = list(range(max([0, 0 - offsets[c]]), min([numframes[c], numframes[c] - offsets[c]]), 1))
@@ -118,7 +121,20 @@ def main(config, opath, camlist, flipy, offsets, like):
                         outdata[ind][outrows, outcol] = camdata[ind].iloc[inrows, incol]
                         outdata[ind][outrows, outcol+1] = height - camdata[ind].iloc[inrows,incol+1]
                     else:
-                        outdata[ind][outrows,outcol:outcol+2] = camdata[ind].iloc[inrows, incol:incol+2]
+                        outdata[ind][outrows, outcol:outcol+2] = camdata[ind].iloc[inrows, incol:incol+2]
+                    # set out of range values to nan
+                    outdata[ind][outdata[ind] <= 0] = np.nan
+
+                    for xc in xcols:
+                        foo = outdata[ind][:, xc]
+                        foo[foo >= width] = np.nan
+                        outdata[ind][:, xc] = foo
+
+                    for yc in ycols:
+                        foo = outdata[ind][:, yc]
+                        foo[foo >= height] = np.nan
+                        outdata[ind][:, yc] = foo
+
         else:
             for i in range(len(tracks)):
                 incol = i * iter
@@ -204,4 +220,4 @@ if __name__== '__main__':
     args = parser.parse_args()
 
     
-    main(args.config, args.newpath, args.dlctracks, args.flipy, args.offsets, float(args.like))
+    dlc2dlt(args.config, args.newpath, args.dlctracks, args.flipy, args.offsets, float(args.like))
