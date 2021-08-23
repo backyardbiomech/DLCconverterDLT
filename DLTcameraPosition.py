@@ -115,6 +115,7 @@ def dlt2dlcCoefs(dltp, profp):
         }
         cal['cam_{}'.format(cam-1)]=camdict
     # not clear if metadata is important, and can't calculate "error" without original checkerboard pattern, so making somehting up for now
+    # might be able to grab the reconstruction error from the wand calibration output
     cal["metadata"]= {"adjusted": False, "error": 0.1}
     # write toml
     ofile = dltp.parent / 'calibration.toml'
