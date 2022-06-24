@@ -17,7 +17,7 @@ If you go back to Argus/DLTdv and digitize new frames/points, you have two optio
 
 Author: Brandon E. Jackson, Ph.D.
 email: jacksonbe3@longwood.edu
-Last edited: 22 Oct 2020
+Last edited: 15 June 2022
 """
 
 import argparse
@@ -28,6 +28,7 @@ import os
 import re
 import warnings
 from deeplabcut.utils.auxiliaryfunctions import read_config
+from deeplabcut.utils import conversioncode
 
 warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
@@ -66,7 +67,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         newcol = xypts.columns[i].split('_')[0]
         newcols[newcol]=i
 
-    # find ./CollectedData_scorerintitials.h5 in labdir
+    # find existing ./CollectedData_scorerintitials.h5 in labdir
     colldata = list(labdir.glob('**/CollectedData_*.h5'))
 
     # find extracted images
@@ -110,6 +111,8 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         df = df.append(newimdf)
         df.sort_index(inplace=True)
         addbp = True
+    conversioncode.guarantee_multiindex_rows(df)
+    df.sort_index(inplace=True)
 
     if offset < 0:
         # the DLT digitized value on the n-th row of the csv was actually digitized at n+offset frame of video file
