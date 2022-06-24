@@ -34,7 +34,7 @@ warnings.filterwarnings('ignore', category=pd.io.pytables.PerformanceWarning)
 
 # TODO: set up to call deeplabcut functions for "add video" and "extract frames", including manually passing a set of frame numbers
 
-def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=False):
+def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=False, cleanup=False):
     # make paths into Paths
     config=Path(config)
     xyfname=Path(xyfname)
@@ -54,12 +54,18 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         bodyparts=cfg['bodyparts']
     coords = ['x', 'y']
 
- # load xypts file to dataframe
+    # load xypts file to dataframe
     xypts = pd.read_csv(xyfname)
     xypts = xypts.astype('float64')
+    # make all columns lowercase for argus DLT compatibility
+    xypts.columns = [c.lower() for c in xypts.columns]
     # just get the columns for this camera
     camstr = 'cam_{}_'.format(cnum)
     thiscam = [x for x in xypts.columns if camstr in x]
+    if len(thiscam ) ==0:
+        #DLTdv8 naming
+        camstr = 'cam{}_'.format(cnum)
+        thiscam = [x for x in xypts.columns if camstr in x]
     xypts = xypts[thiscam]
     newcols = {}
     # store track name and column index - start of tracks - in dict
@@ -102,7 +108,8 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         df = pd.read_hdf(colldata[0], 'df_with_missing')
 
         # build an index based on images in folder
-        newindex = ['labeled-data{}{}{}{}'.format(os.sep, camname, os.sep, im.name) for im in imgs]
+       # newindex = ['labeled-data{}{}{}{}'.format(os.sep, camname, os.sep, im.name) for im in imgs]
+        newindex = [('labeled-data', camname, im.name) for im in imgs]
         # compare to index in Collected data, add non-existent entries
         newindex = list(set(newindex) - set(df.index))
         #create a temp df
@@ -111,6 +118,7 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         df = df.append(newimdf)
         df.sort_index(inplace=True)
         addbp = True
+    
     conversioncode.guarantee_multiindex_rows(df)
     df.sort_index(inplace=True)
 
@@ -162,15 +170,15 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
                 indx.extend(r)
         news = list(zip(indx, newbp))
         for new in news:
-            xyrow = int(re.findall(r'img(\d+)\.png', new[0])[0])
+            xyrow = int(re.findall(r'img(\d+)\.png', new[0][2])[0])
             bp = new[1]
             try:
                 if ma:
                     df.loc[new[0], (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
-                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                        xyrow, ['{}_{}x'.format(bp, camstr), '{}_{}y'.format(bp, camstr)]].values
                 else:
                     df.loc[new[0], (scorer, bp, ['x', 'y'])] = xypts.loc[
-                        xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                        xyrow, ['{}_{}x'.format(bp, camstr), '{}_{}y'.format(bp, camstr)]].values
             except:
                 #image or xypts row not found due to offsets deletions
                 continue
@@ -180,33 +188,33 @@ def dlt2dlclabels(config, xyfname, vid, cnum, offset, flipy=True, ind=0, addbp=F
         # go through news and get insert digitized points from xydata
         for new in news:
             for bp in bodyparts:
-                xyrow = int(re.findall(r'img(\d+)\.png', new)[0])
+                xyrow = int(re.findall(r'img(\d+)\.png', new[2])[0])
                 try:
                     if ma:
                         df.loc[new, (scorer, indiv, bp, ['x', 'y'])] = xypts.loc[
-                            xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                            xyrow, ['{}_{}x'.format(bp, camstr), '{}_{}y'.format(bp, camstr)]].values
                     else:
                         df.loc[new, (scorer, bp, ['x', 'y'])] = xypts.loc[
-                            xyrow, ['{}_cam_{}_x'.format(bp, cnum), '{}_cam_{}_y'.format(bp, cnum)]].values
+                            xyrow, ['{}_{}x'.format(bp, camstr), '{}_{}y'.format(bp, camstr)]].values
                 except:
                     # image or xypts row not found due to offsets deletions
                     continue
-
-    # clean out rows and images with no annotation data
-    blanks = df.index[df.isnull().all(1)]
-    df = df.drop(blanks)
-    blankimgs = [labdir / Path(x.split(os.sep)[-1]) for x in list(blanks)]
-    for bl in blankimgs:
-        try:
-            bl.unlink()
-        except FileNotFoundError:
-            continue
+    if cleanup:
+        # clean out rows and images with no annotation data
+        blanks = df.index[df.isnull().all(1)]
+        df = df.drop(blanks)
+        blankimgs = [labdir / Path(x[2].split(os.sep)[-1]) for x in list(blanks)]
+        for bl in blankimgs:
+            try:
+                bl.unlink()
+            except FileNotFoundError:
+                continue
     # replace DLT nans with empty entries for DLC formatting
     df.astype('float64')
     df.sort_index(inplace=True)
 
     # # save out hdf and csv files
-    df.to_hdf(Path(labdir) / ('CollectedData_' + scorer + '.h5'), 'df_with_missing', format='table', mode='w')
+    df.to_hdf(Path(labdir) / ('CollectedData_' + scorer + '.h5'), 'df_with_missing')#, format='table', mode='w')
     df.to_csv(Path(labdir) / ('CollectedData_' + scorer + '.csv'))
 
 
@@ -223,9 +231,10 @@ if __name__ == '__main__':
     parser.add_argument('-offset', default=0, type=int, help='enter offset of chosen camera as integer')
     parser.add_argument('-ind', default=0, type=int, help='enter 0-indexed individual number from config file. \n xypts.csv must have only one indiv digitized.')
     parser.add_argument('-addbp', default=False, help='if new tracks/bodyparts were digitized in Argus/DLTdv, add this flag to add those to labeled data')
+    parser.add_argument('-cleanup', default=False, help='if true, this will delete images and table rows for which no annotations exist in DLT or DLC data - use with caution')
 
 
     args = parser.parse_args()
 
-    dlt2dlclabels(args.config, args.xy, args.vid, args.cnum, int(args.offset), flipy=args.flipy, ind=args.ind, addbp=args.addbp)
+    dlt2dlclabels(args.config, args.xy, args.vid, args.cnum, int(args.offset), flipy=args.flipy, ind=args.ind, addbp=args.addbp, cleanup=args.cleanup)
 
