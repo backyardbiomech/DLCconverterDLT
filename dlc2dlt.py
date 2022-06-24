@@ -25,7 +25,7 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 
 # TODO: read no. of individuals if multi, decide if 1 file per indiv., or multiple tracks in one file
 
-def dlc2dlt(config, opath, camlist, flipy, offsets, like):
+def dlc2dlt(config, opath, camlist, flipy, offsets, like, vid):
     config=Path(config)
     opath = Path(opath)
     offsets = [int(x) for x in offsets]
@@ -74,10 +74,18 @@ def dlc2dlt(config, opath, camlist, flipy, offsets, like):
 
         if ma:
             alldata[c]={}
-            for ind in individuals:
+            try:
+                for ind in individuals:
+                    for track in set(tracks):
+                        camdata.loc[camdata[scorer][ind][track]['likelihood'] <= like, (scorer, ind, track, ['x', 'y'])] = np.nan
+                    alldata[c][ind]=camdata[scorer][ind]
+            except:
+                #it's possible in some workflows for config to show multianimal but the tracked data file to not have individuals
+                # so act as if single animal
+                ma=False
                 for track in set(tracks):
-                    camdata.loc[camdata[scorer][ind][track]['likelihood'] <= like, (scorer, ind, track, ['x', 'y'])] = np.nan
-                alldata[c][ind]=camdata[scorer][ind]
+                    camdata.loc[camdata[scorer][track]['likelihood'] <= like, (scorer, track, ['x', 'y'])] = np.nan
+                alldata[c] = camdata[scorer]
         else:
             for track in set(tracks):
                 camdata.loc[camdata[scorer][track]['likelihood'] <= like, (scorer, track, ['x', 'y'])] = np.nan
@@ -102,12 +110,16 @@ def dlc2dlt(config, opath, camlist, flipy, offsets, like):
     for c, camdata in alldata.items():
 
         # load each video, check for "height", and flip the y-coordinates (origin is lower left in Argus and DLTdv 1-7, upper left in openCV, DLC, DLTdv8)
-        # DLC video name is datafile stem, plus _labeled.mp4
-        vidname = camlist[c].rsplit(scorer)[0] + '.mov'
+        if vid:
+            vidname = vid[c]
+        else:
+            # DLC video name is datafile stem, plus _labeled.mp4
+            vidname = camlist[c].rsplit(scorer)[0] + '.mp4'
         cap = cv2.VideoCapture(str(vidname))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-
+        if height==0 or width==0:
+            print("no video file found, so video dimensions cannot be determined")
         # make lists of rows, of matching length, that account for offsets (out = in - offset)
         outrows = list(range(max([0, 0 - offsets[c]]), min([numframes[c], numframes[c] - offsets[c]]), 1))
         inrows = list(range(max([0, 0 + offsets[c]]), min([numframes[c], numframes[c] + offsets[c]]), 1))
@@ -216,8 +228,9 @@ if __name__== '__main__':
     parser.add_argument('-flipy', default=True, help = 'flip y coordinates - necessar for Argus and DLTdv versions 1-7, set to False for DLTdv8')
     parser.add_argument('-offsets', nargs='+', default = None, help='enter offsets as space separated list including first camera e.g.: -offsets 0 -12 2')
     parser.add_argument('-like', default=0.9, help='enter the likelihood threshold - defaults to 0.9')
+    parser.add_argument('-vid', default = None, nargs='+', help='path to video if it is not located with the data file')
 
     args = parser.parse_args()
 
     
-    dlc2dlt(args.config, args.newpath, args.dlctracks, args.flipy, args.offsets, float(args.like))
+    dlc2dlt(args.config, args.newpath, args.dlctracks, args.flipy, args.offsets, float(args.like), args.vid)
