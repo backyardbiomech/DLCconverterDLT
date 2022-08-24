@@ -1,5 +1,5 @@
 """
-Takes dlc tracked coordinates (from <DLC_project_folder>/videos/<name>.hd5) files from multiple DLT calibrated cameras, and exports a DLTdv or Argus based DLT -xypts.csv file. Will also make "dummy" -xyzpts.csv, -offsets.csv, and -xyzres.csv (all blank) for so that everything will load in DLTdv8.
+Takes dlc tracked coordinates (e.g. from <DLC_project_folder>/videos/<name>.h5) files from multiple DLT calibrated cameras, and exports a DLTdv or Argus based DLT -xypts.csv file. Will also make "dummy" -xyzpts.csv, -offsets.csv, and -xyzres.csv (all blank) for so that everything will load in DLTdv8.
 
 When passing the '-newpath' flag, input a full path ending with a filename prefix. e.g. /path/to/desired/folder/trial01
 will make trial01-xypts.csv, trial01-xyzpts.csv, trial01-xyzres.csv, trial01-offsets.csv
@@ -25,7 +25,7 @@ from deeplabcut.utils.auxiliaryfunctions import read_config
 
 # TODO: read no. of individuals if multi, decide if 1 file per indiv., or multiple tracks in one file
 
-def dlc2dlt(config, opath, camlist, flipy, offsets, like, vid):
+def dlc2dlt(config, opath, camlist, flipy, offsets, like, vid=None, videotype='.avi'):
     config=Path(config)
     opath = Path(opath)
     offsets = [int(x) for x in offsets]
@@ -48,12 +48,13 @@ def dlc2dlt(config, opath, camlist, flipy, offsets, like, vid):
     # first key is cam, second is indiv
     alldata = {}
     numframes = []
-    digi = True
+    scorers=[]
     # load each data file get some basic info and store data in a dict
     for c in range(numcams):
         #load the hd5
         camdata = pd.read_hdf(camlist[c], 'df_with_missing')
         scorer=camdata.columns.get_level_values('scorer')[0]
+        scorers.append(scorer)
         #get track names from first camera
         #if c== 0:
             #tracks = camdata.columns.get_level_values('bodyparts')
@@ -113,13 +114,12 @@ def dlc2dlt(config, opath, camlist, flipy, offsets, like, vid):
         if vid:
             vidname = vid[c]
         else:
-            # DLC video name is datafile stem, plus _labeled.mp4
-            vidname = camlist[c].rsplit(scorer)[0] + '.mp4'
+            vidname = camlist[c].rsplit(scorers[c])[0] + videotype
         cap = cv2.VideoCapture(str(vidname))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         if height==0 or width==0:
-            print("no video file found, so video dimensions cannot be determined")
+            print(f"video file {vidname} not found, so video dimensions cannot be determined")
         # make lists of rows, of matching length, that account for offsets (out = in - offset)
         outrows = list(range(max([0, 0 - offsets[c]]), min([numframes[c], numframes[c] - offsets[c]]), 1))
         inrows = list(range(max([0, 0 + offsets[c]]), min([numframes[c], numframes[c] + offsets[c]]), 1))
